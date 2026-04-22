@@ -1,0 +1,91 @@
+{
+  "id": "skill-auto-injection",
+  "name": "Skill Auto-Injection",
+  "description": "Auto-match user delivery task with available skills using embedding similarity",
+  "version": "0.1.0",
+  "kind": "utility",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "embedding": {
+        "type": "object",
+        "properties": {
+          "baseURL": { "type": "string", "default": "http://localhost:11434" },
+          "model": { "type": "string", "default": "bge-m3" },
+          "dimensions": { "type": "integer", "default": 1024 }
+        }
+      },
+      "translate": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean", "default": true },
+          "provider": { 
+            "type": "string", 
+            "enum": ["ollama", "minimax", "openai"],
+            "default": "ollama" 
+          },
+          "model": { "type": "string", "default": "qwen2.5:7b" }
+        }
+      },
+      "matching": {
+        "type": "object",
+        "properties": {
+          "skillMatchThreshold": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.6
+          },
+          "maxSkills": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 3
+          }
+        }
+      },
+      "deliveryTaskPatterns": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": [
+          "帮我做",
+          "帮我",
+          "你能帮我",
+          "帮我完成",
+          "请帮我",
+          "能否帮我",
+          "能不能帮我",
+          "Do it for me",
+          "Can you help me",
+          "Help me with",
+          "I need you to",
+          "Please help me",
+          "Could you help me",
+          "帮我处理",
+          "帮我查一下",
+          "帮我搜索",
+          "帮我找一下"
+        ]
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Skill Auto-Injection",
+      "help": "Automatically match user input with available skills"
+    },
+    "matching.skillMatchThreshold": {
+      "label": "Skill Match Threshold",
+      "help": "Minimum similarity score (0-1) to consider a skill as a match"
+    },
+    "matching.maxSkills": {
+      "label": "Max Skills to Match",
+      "help": "Maximum number of skills to include in the prompt"
+    }
+  }
+}

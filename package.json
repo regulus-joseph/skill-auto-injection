@@ -1,0 +1,36 @@
+{
+  "name": "skill-auto-injection",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Auto-match user delivery task with available skills for better agent responses",
+  "main": "src/index.ts",
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.49"
+  },
+  "changelog": [
+    {
+      "version": "0.2.0",
+      "date": "2026-04-22",
+      "changes": [
+        "添加多provider翻译支持(ollama/minimax/openai)",
+        "优化日志输出,便于调试",
+        "修复bug: 重复的匹配逻辑代码"
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "date": "2026-04-22",
+      "changes": [
+        "初始版本",
+        "基于embedding的skill匹配",
+        "before_agent_start hook自动注入",
+        "支持翻译功能处理跨语言匹配"
+      ]
+    }
+  ]
+}
