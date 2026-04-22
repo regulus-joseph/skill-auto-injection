@@ -1,35 +1,35 @@
 # Skill Auto-Injection Plugin
 
-> Automatically match user delivery task with available skills using embedding similarity
+> Automatically match user delivery tasks with available skills using embedding similarity
 
-## 版本历史
+## Changelog
 
-| 版本 | 日期 | 更新内容 |
-|-----|------|---------|
-| 0.1.0 | 2026-04-22 | 初始版本: 基于embedding的skill匹配 |
-| 0.2.0 | 2026-04-22 | 添加多provider翻译支持(ollama/minimax/openai),优化日志 |
+| Version | Date | Changes |
+|---------|------|---------|
+| 0.1.0 | 2026-04-22 | Initial version: embedding-based skill matching |
+| 0.2.0 | 2026-04-22 | Add multi-provider translation (ollama/minimax/openai), optimize logging |
 
-## 功能特性
+## Features
 
-- **交付任务检测**: 通过embedding相似度检测用户输入是否为交付任务
-- **Skill匹配**: 使用embedding模型将用户输入与skill描述进行匹配
-- **自动翻译**: 支持将非英文用户输入翻译成英文后匹配(解决跨语言问题)
-- **多Provider翻译**: 支持Ollama、MiniMax、OpenAI等多种翻译provider
-- **上下文注入**: 通过 `before_agent_start` hook自动将匹配的skills注入到上下文
-- **缓存优化**: Skills embedding结果缓存5分钟,避免重复计算
+- **Delivery Task Detection**: Detect if user input is a delivery task via embedding similarity
+- **Skill Matching**: Match user input against skill descriptions using embedding models
+- **Auto-Translation**: Translate non-English input to English for cross-language matching
+- **Multi-Provider Translation**: Support Ollama, MiniMax, OpenAI translation providers
+- **Context Injection**: Auto-inject matched skills via `before_agent_start` hook
+- **Caching**: Cache skill embeddings for 5 minutes to avoid repeated computation
 
-## 项目结构
+## Project Structure
 
 ```
 skill-auto-injection/
-├── openclaw.plugin.json    # 插件配置
-├── package.json            # Node.js包配置
+├── openclaw.plugin.json    # Plugin configuration
+├── package.json          # Node.js package config
 ├── src/
-│   └── index.ts          # 插件入口
+│   └── index.ts          # Plugin entry point
 └── README.md
 ```
 
-## 安装
+## Installation
 
 ```bash
 cd ~/projects/skill-auto-injection
@@ -38,9 +38,9 @@ openclaw plugins install --link .
 openclaw gateway restart
 ```
 
-## 配置
+## Configuration
 
-### 插件配置 (openclaw.json)
+### Plugin Config (openclaw.json)
 
 ```json
 {
@@ -70,50 +70,50 @@ openclaw gateway restart
 }
 ```
 
-### 配置参数说明
+### Config Parameters
 
-| 配置 | 说明 | 默认值 |
-|-----|------|-------|
-| `enabled` | 是否启用 | `true` |
-| `embedding.baseURL` | Embedding API地址 | `http://localhost:11434` |
-| `embedding.model` | Embedding模型 | `bge-m3` |
-| `embedding.dimensions` | 向量维度 | `1024` |
-| `translate.enabled` | 是否启用翻译 | `true` |
-| `translate.provider` | 翻译provider | `ollama` |
-| `translate.model` | 翻译模型 | `qwen2.5:7b` |
-| `matching.skillMatchThreshold` | Skill匹配阈值(0-1) | `0.6` |
-| `matching.maxSkills` | 最大注入skill数量 | `3` |
+| Config | Description | Default |
+|--------|-------------|---------|
+| `enabled` | Enable plugin | `true` |
+| `embedding.baseURL` | Embedding API URL | `http://localhost:11434` |
+| `embedding.model` | Embedding model | `bge-m3` |
+| `embedding.dimensions` | Vector dimensions | `1024` |
+| `translate.enabled` | Enable translation | `true` |
+| `translate.provider` | Translation provider | `ollama` |
+| `translate.model` | Translation model | `qwen2.5:7b` |
+| `matching.skillMatchThreshold` | Skill match threshold (0-1) | `0.6` |
+| `matching.maxSkills` | Max skills to inject | `3` |
 
-### 翻译Provider配置
+### Translation Provider Config
 
-| Provider | 环境变量 | 说明 |
-|----------|---------|------|
-| `ollama` | 无需配置 | 使用本地Ollama服务 |
-| `minimax` | `MINIMAX_API_KEY` | 使用MiniMax API |
-| `openai` | `OPENAI_API_KEY` | 使用OpenAI API |
+| Provider | Env Variable | Notes |
+|----------|-------------|-------|
+| `ollama` | None required | Use local Ollama |
+| `minimax` | `MINIMAX_API_KEY` | Use MiniMax API |
+| `openai` | `OPENAI_API_KEY` | Use OpenAI API |
 
-## 工作流程
+## Workflow
 
 ```
-用户消息 → before_agent_start hook →
-  (可选)翻译用户输入到英文 →
-  获取embedding →
-  与所有skills的embedding匹配 →
-  匹配threshold以上的skills →
-  注入到context的prependContext
+User Message → before_agent_start hook →
+  (optional) Translate to English →
+  Get embedding →
+  Match against all skills →
+  Filter by threshold →
+  Inject into prependContext
 ```
 
-## Skills来源
+## Skills Source
 
-插件从以下目录扫描SKILL.md:
-1. `~/.openclaw/skills/` - 全局skills
-2. `~/.openclaw/workspace/.openclaw/skills/` - 工作区skills
+Plugin scans SKILL.md from:
+1. `~/.openclaw/skills/` - Global skills
+2. `~/.openclaw/workspace/.openclaw/skills/` - Workspace skills
 
-**注意**: 当前只扫描本地目录,openclaw内置的bundled skills(如acp-router, coding-agent等)不在扫描范围内。
+**Note**: Currently only scans local directories. OpenClaw bundled skills (acp-router, coding-agent, etc.) are not included.
 
-## 注入格式
+## Injection Format
 
-当匹配到skills时,会在context前添加:
+When skills are matched, prepends:
 
 ```
 [Skill Auto-Injection] The current conversation may involve these available skills:
@@ -122,29 +122,29 @@ openclaw gateway restart
 Please consider using relevant skills to fulfill the user's request if applicable.
 ```
 
-## 调试
+## Debugging
 
 ```bash
-# 查看插件日志
+# View plugin logs
 openclaw logs 2>&1 | grep skill-auto-injection
 
-# 查看skills列表
+# List skills
 openclaw skills list
 
-# 重启网关
+# Restart gateway
 openclaw gateway restart
 ```
 
-## 后续优化方向
+## Future Improvements
 
-1. **支持bundled skills**: 扫描openclaw内置skills目录
-2. **交付任务检测**: 专门的交付任务句式检测(而非仅依赖embedding)
-3. **白名单管理**: 支持通过配置维护skill白名单
-4. **排除列表**: 支持排除不需要自动匹配的skills
-5. **实时翻译优化**: 使用更快的翻译服务减少延迟
+1. **Bundled Skills Support**: Scan OpenClaw builtin skills directory
+2. **Delivery Task Detection**: Dedicated delivery pattern detection (not just embedding)
+3. **Whitelist Management**: Configurable skill whitelist
+4. **Exclusion List**: Exclude specific skills from auto-matching
+5. **Real-time Translation**: Use faster translation for lower latency
 
-## 参考
+## References
 
 - [OpenClaw Plugin SDK](https://github.com/openclaw/openclaw)
-- [memory-recall插件](../memory-recall)
+- [memory-recall plugin](../memory-recall)
 - [bge-m3 embedding](https://ollama.com/)
