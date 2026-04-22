@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config (not for public repo)
+config/
+examples/
+tests/
+
+# Internal docs (not for public repo)
+SUBMISSION_SUMMARY.md
+COMMUNITY_EMAIL.md
