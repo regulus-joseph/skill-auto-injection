@@ -16,7 +16,7 @@
 - **LLM Keyword Extraction**: On skill load, extract 3-5 trigger keywords via LLM — no manual whitelist maintenance
 - **Smart Translation**: Skip translation when query already contains English characters
 - **Skill Matching**: Match user input against skill descriptions using embedding models
-- **Multi-Provider Translation**: Support Ollama, MiniMax, OpenAI translation providers
+- **Ollama-Only Translation**: Uses local Ollama for translation and keyword extraction — no external API keys required
 - **Context Injection**: Auto-inject matched skills via `before_agent_start` hook
 - **Caching**: Cache skill embeddings and keywords for 5 minutes to avoid repeated computation
 
@@ -62,7 +62,6 @@ openclaw gateway restart
           },
           "translate": {
             "enabled": true,
-            "provider": "ollama",
             "model": "qwen2.5:7b"
           },
           "matching": {
@@ -90,7 +89,6 @@ openclaw gateway restart
 | `embedding.model` | Embedding model | `bge-m3` |
 | `embedding.dimensions` | Vector dimensions | `1024` |
 | `translate.enabled` | Enable translation | `true` |
-| `translate.provider` | Translation provider | `ollama` |
 | `translate.model` | Translation model | `qwen2.5:7b` |
 | `matching.skillMatchThreshold` | Skill match threshold (0-1) | `0.6` |
 | `matching.maxSkills` | Max skills to inject | `3` |
@@ -98,13 +96,7 @@ openclaw gateway restart
 | `keyword.model` | LLM model for keyword extraction | `qwen2.5:7b` |
 | `keyword.baseURL` | Override baseURL for keyword LLM | `null` (uses embedding.baseURL) |
 
-### Translation Provider Config
-
-| Provider | Env Variable | Notes |
-|----------|-------------|-------|
-| `ollama` | None required | Use local Ollama |
-| `minimax` | `MINIMAX_API_KEY` | Use MiniMax API |
-| `openai` | `OPENAI_API_KEY` | Use OpenAI API |
+**Note**: All LLM operations (translation, keyword extraction, embeddings) use Ollama locally — no external API keys required.
 
 ## Workflow
 

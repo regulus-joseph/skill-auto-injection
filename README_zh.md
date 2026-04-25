@@ -16,7 +16,7 @@
 - **LLM 关键字提取**：技能加载时自动提取 3~5 个触发关键字，无需手动维护白名单
 - **智能翻译**：query 已含英文字符时跳过翻译
 - **技能匹配**：使用 embedding 模型将用户输入与技能描述进行匹配
-- **多提供商翻译**：支持 Ollama、MiniMax、OpenAI 翻译提供商
+- **纯 Ollama 翻译**：使用本地 Ollama 进行翻译和关键字提取，无需外部 API key
 - **上下文注入**：通过 `before_agent_start` 钩子自动注入匹配到的技能
 - **缓存**：技能 embedding 和关键字缓存 5 分钟，避免重复计算
 
@@ -62,7 +62,6 @@ openclaw gateway restart
           },
           "translate": {
             "enabled": true,
-            "provider": "ollama",
             "model": "qwen2.5:7b"
           },
           "matching": {
@@ -90,7 +89,6 @@ openclaw gateway restart
 | `embedding.model` | Embedding 模型 | `bge-m3` |
 | `embedding.dimensions` | 向量维度 | `1024` |
 | `translate.enabled` | 启用翻译 | `true` |
-| `translate.provider` | 翻译提供商 | `ollama` |
 | `translate.model` | 翻译模型 | `qwen2.5:7b` |
 | `matching.skillMatchThreshold` | 技能匹配阈值 (0-1) | `0.6` |
 | `matching.maxSkills` | 最大注入技能数 | `3` |
@@ -98,13 +96,7 @@ openclaw gateway restart
 | `keyword.model` | 关键字提取 LLM 模型 | `qwen2.5:7b` |
 | `keyword.baseURL` | 覆盖关键字 LLM 的 baseURL | `null`（复用 embedding.baseURL）|
 
-### 翻译提供商配置
-
-| 提供商 | 环境变量 | 说明 |
-|--------|----------|------|
-| `ollama` | 无需配置 | 使用本地 Ollama |
-| `minimax` | `MINIMAX_API_KEY` | 使用 MiniMax API |
-| `openai` | `OPENAI_API_KEY` | 使用 OpenAI API |
+**注意**：所有 LLM 操作（翻译、关键字提取、embedding）均使用本地 Ollama，无需外部 API key。
 
 ## 工作流程
 
