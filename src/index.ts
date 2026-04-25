@@ -20,7 +20,7 @@ interface SkillAutoInjectionConfig {
   };
   translate?: {
     enabled?: boolean;
-    provider?: "ollama" | "minimax" | "openai";
+    provider?: "ollama";
     model?: string;
   };
   matching?: {
@@ -79,31 +79,17 @@ async function getEmbedding(
 
 async function translateToEnglish(
   text: string,
-  config: SkillAutoInjectionConfig,
-  minimaxApiKey: string,
-  openaiApiKey: string
+  config: SkillAutoInjectionConfig
 ): Promise<string | null> {
   const translateConfig = config.translate ?? {};
-  const provider = translateConfig.provider ?? "ollama";
-  const model = translateConfig.model ?? "qwen2.5:7b";
 
   if (translateConfig.enabled === false) {
     return null;
   }
 
-  switch (provider) {
-    case "ollama":
-      return translateWithOllama(text, config.embedding?.baseURL ?? "http://localhost:11434", model);
-    case "minimax":
-      return translateWithMinimax(text, minimaxApiKey);
-    case "openai":
-      return translateWithOpenAI(text, openaiApiKey);
-    default:
-      return translateWithOllama(text, config.embedding?.baseURL ?? "http://localhost:11434", model);
-  }
-}
+  const baseUrl = config.embedding?.baseURL ?? "http://localhost:11434";
+  const model = translateConfig.model ?? "qwen2.5:7b";
 
-async function translateWithOllama(text: string, baseUrl: string, model: string): Promise<string | null> {
   try {
     const resp = await fetch(`${baseUrl.replace("/api/embeddings", "")}/api/generate`, {
       method: "POST",
@@ -122,73 +108,14 @@ async function translateWithOllama(text: string, baseUrl: string, model: string)
   }
 }
 
-async function translateWithMinimax(text: string, apiKey: string): Promise<string | null> {
-  if (!apiKey) {
-    console.warn("[skill-auto-injection] MINIMAX_API_KEY not set for translation");
-    return null;
-  }
-  try {
-    const resp = await fetch("https://api.minimaxi.com/v1/text/chatcompletion_pro", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "abab6.5s-chat",
-        messages: [
-          { role: "system", content: "You are a translator. Translate the user's request to English. Only respond with the translation, nothing else." },
-          { role: "user", content: text }
-        ],
-      }),
-    });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content?.trim() ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function translateWithOpenAI(text: string, apiKey: string): Promise<string | null> {
-  if (!apiKey) {
-    console.warn("[skill-auto-injection] OPENAI_API_KEY not set for translation");
-    return null;
-  }
-  try {
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "You are a translator. Translate the user's request to English. Only respond with the translation, nothing else." },
-          { role: "user", content: text }
-        ],
-      }),
-    });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content?.trim() ?? null;
-  } catch {
-    return null;
-  }
-}
-
 async function extractKeywordsFromDescription(
   description: string,
   skillName: string,
-  config: SkillAutoInjectionConfig,
-  minimaxApiKey: string,
-  openaiApiKey: string
+  config: SkillAutoInjectionConfig
 ): Promise<string[]> {
   const kwConfig = config.keyword ?? {};
   if (kwConfig.enabled === false) return [];
 
-  const provider = config.translate?.provider ?? "ollama";
   const model = kwConfig.model ?? config.translate?.model ?? "qwen2.5:7b";
   const baseURL = kwConfig.baseURL ?? config.embedding?.baseURL ?? "http://localhost:11434";
 
@@ -200,49 +127,14 @@ Description: ${description}
 Respond with a JSON array, e.g.: ["git", "commit", "version control"]`;
 
   try {
-    let text: string;
-    if (provider === "ollama") {
-      const resp = await fetch(`${baseURL.replace("/api/embeddings", "")}/api/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, prompt, stream: false }),
-      });
-      if (!resp.ok) return [];
-      const data = await resp.json();
-      text = data.response?.trim() ?? "";
-    } else if (provider === "minimax") {
-      if (!minimaxApiKey) return [];
-      const resp = await fetch("https://api.minimaxi.com/v1/text/chatcompletion_pro", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${minimaxApiKey}` },
-        body: JSON.stringify({
-          model: "abab6.5s-chat",
-          messages: [
-            { role: "system", content: "You are a keyword extractor. Return ONLY a JSON array of strings, nothing else." },
-            { role: "user", content: prompt }
-          ],
-        }),
-      });
-      if (!resp.ok) return [];
-      const data = await resp.json();
-      text = data.choices?.[0]?.message?.content?.trim() ?? "";
-    } else {
-      if (!openaiApiKey) return [];
-      const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiApiKey}` },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            { role: "system", content: "You are a keyword extractor. Return ONLY a JSON array of strings, nothing else." },
-            { role: "user", content: prompt }
-          ],
-        }),
-      });
-      if (!resp.ok) return [];
-      const data = await resp.json();
-      text = data.choices?.[0]?.message?.content?.trim() ?? "";
-    }
+    const resp = await fetch(`${baseURL.replace("/api/embeddings", "")}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt, stream: false }),
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    const text = data.response?.trim() ?? "";
 
     const jsonMatch = text.match(/\[[\s\S]*?\]/);
     if (!jsonMatch) return [];
@@ -282,9 +174,7 @@ async function getOrCacheSkills(
   api: OpenClawPluginApi,
   embeddingUrl: string,
   embeddingModel: string,
-  config: SkillAutoInjectionConfig,
-  minimaxApiKey: string,
-  openaiApiKey: string
+  config: SkillAutoInjectionConfig
 ): Promise<CachedSkill[]> {
   const { readdir, readFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
@@ -316,7 +206,7 @@ async function getOrCacheSkills(
     if (!info.description) continue;
     const [embedding, keywords] = await Promise.all([
       getEmbedding(info.description, embeddingUrl, embeddingModel),
-      extractKeywordsFromDescription(info.description, info.name, config, minimaxApiKey, openaiApiKey),
+      extractKeywordsFromDescription(info.description, info.name, config),
     ]);
     if (embedding.length > 0) {
       cached.push({ info, embedding, keywords });
@@ -344,9 +234,6 @@ const skillAutoInjectionPlugin = {
       return;
     }
 
-    const minimaxApiKey = process.env.MINIMAX_API_KEY ?? "";
-    const openaiApiKey = process.env.OPENAI_API_KEY ?? "";
-
     const embeddingUrl = config.embedding?.baseURL
       ? `${config.embedding.baseURL}/api/embeddings`
       : "http://localhost:11434/api/embeddings";
@@ -364,7 +251,7 @@ const skillAutoInjectionPlugin = {
       api.logger.info?.(`[skill-auto-injection] before_agent_start triggered, prompt length: ${prompt.length}, first 100 chars: "${prompt.slice(0, 100)}"`);
 
       try {
-        const skills = await getOrCacheSkills(api, embeddingUrl, embeddingModel, config, minimaxApiKey, openaiApiKey);
+        const skills = await getOrCacheSkills(api, embeddingUrl, embeddingModel, config);
         if (skills.length === 0) {
           api.logger.info?.(`[skill-auto-injection] no skills loaded, skipping`);
           return;
@@ -394,7 +281,7 @@ const skillAutoInjectionPlugin = {
         let wasTranslated = false;
 
         if (!skipTranslation) {
-          const translated = await translateToEnglish(prompt, config, minimaxApiKey, openaiApiKey);
+          const translated = await translateToEnglish(prompt, config);
           if (translated && translated !== prompt) {
             api.logger.info?.(`[skill-auto-injection] translated: "${prompt.slice(0, 50)}..." -> "${translated.slice(0, 50)}..."`);
             matchText = translated;

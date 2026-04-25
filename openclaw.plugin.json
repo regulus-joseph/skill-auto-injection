@@ -20,13 +20,13 @@
           "dimensions": { "type": "integer", "default": 1024 }
         }
       },
-      "translate": {
+          "translate": {
         "type": "object",
         "properties": {
           "enabled": { "type": "boolean", "default": true },
           "provider": {
             "type": "string",
-            "enum": ["ollama", "minimax", "openai"],
+            "enum": ["ollama"],
             "default": "ollama"
           },
           "model": { "type": "string", "default": "qwen2.5:7b" }
