@@ -79,7 +79,9 @@ async function getEmbedding(
 
 async function translateToEnglish(
   text: string,
-  config: SkillAutoInjectionConfig
+  config: SkillAutoInjectionConfig,
+  minimaxApiKey: string,
+  openaiApiKey: string
 ): Promise<string | null> {
   const translateConfig = config.translate ?? {};
   const provider = translateConfig.provider ?? "ollama";
@@ -93,9 +95,9 @@ async function translateToEnglish(
     case "ollama":
       return translateWithOllama(text, config.embedding?.baseURL ?? "http://localhost:11434", model);
     case "minimax":
-      return translateWithMinimax(text, model);
+      return translateWithMinimax(text, minimaxApiKey);
     case "openai":
-      return translateWithOpenAI(text, model);
+      return translateWithOpenAI(text, openaiApiKey);
     default:
       return translateWithOllama(text, config.embedding?.baseURL ?? "http://localhost:11434", model);
   }
@@ -120,8 +122,7 @@ async function translateWithOllama(text: string, baseUrl: string, model: string)
   }
 }
 
-async function translateWithMinimax(text: string, _model: string): Promise<string | null> {
-  const apiKey = process.env.MINIMAX_API_KEY;
+async function translateWithMinimax(text: string, apiKey: string): Promise<string | null> {
   if (!apiKey) {
     console.warn("[skill-auto-injection] MINIMAX_API_KEY not set for translation");
     return null;
@@ -149,8 +150,7 @@ async function translateWithMinimax(text: string, _model: string): Promise<strin
   }
 }
 
-async function translateWithOpenAI(text: string, _model: string): Promise<string | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
+async function translateWithOpenAI(text: string, apiKey: string): Promise<string | null> {
   if (!apiKey) {
     console.warn("[skill-auto-injection] OPENAI_API_KEY not set for translation");
     return null;
@@ -181,7 +181,9 @@ async function translateWithOpenAI(text: string, _model: string): Promise<string
 async function extractKeywordsFromDescription(
   description: string,
   skillName: string,
-  config: SkillAutoInjectionConfig
+  config: SkillAutoInjectionConfig,
+  minimaxApiKey: string,
+  openaiApiKey: string
 ): Promise<string[]> {
   const kwConfig = config.keyword ?? {};
   if (kwConfig.enabled === false) return [];
@@ -209,11 +211,10 @@ Respond with a JSON array, e.g.: ["git", "commit", "version control"]`;
       const data = await resp.json();
       text = data.response?.trim() ?? "";
     } else if (provider === "minimax") {
-      const apiKey = process.env.MINIMAX_API_KEY;
-      if (!apiKey) return [];
+      if (!minimaxApiKey) return [];
       const resp = await fetch("https://api.minimaxi.com/v1/text/chatcompletion_pro", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${minimaxApiKey}` },
         body: JSON.stringify({
           model: "abab6.5s-chat",
           messages: [
@@ -226,11 +227,10 @@ Respond with a JSON array, e.g.: ["git", "commit", "version control"]`;
       const data = await resp.json();
       text = data.choices?.[0]?.message?.content?.trim() ?? "";
     } else {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) return [];
+      if (!openaiApiKey) return [];
       const resp = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiApiKey}` },
         body: JSON.stringify({
           model: "gpt-4o-mini",
           messages: [
@@ -282,7 +282,9 @@ async function getOrCacheSkills(
   api: OpenClawPluginApi,
   embeddingUrl: string,
   embeddingModel: string,
-  config: SkillAutoInjectionConfig
+  config: SkillAutoInjectionConfig,
+  minimaxApiKey: string,
+  openaiApiKey: string
 ): Promise<CachedSkill[]> {
   const { readdir, readFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
@@ -314,7 +316,7 @@ async function getOrCacheSkills(
     if (!info.description) continue;
     const [embedding, keywords] = await Promise.all([
       getEmbedding(info.description, embeddingUrl, embeddingModel),
-      extractKeywordsFromDescription(info.description, info.name, config),
+      extractKeywordsFromDescription(info.description, info.name, config, minimaxApiKey, openaiApiKey),
     ]);
     if (embedding.length > 0) {
       cached.push({ info, embedding, keywords });
@@ -342,6 +344,9 @@ const skillAutoInjectionPlugin = {
       return;
     }
 
+    const minimaxApiKey = process.env.MINIMAX_API_KEY ?? "";
+    const openaiApiKey = process.env.OPENAI_API_KEY ?? "";
+
     const embeddingUrl = config.embedding?.baseURL
       ? `${config.embedding.baseURL}/api/embeddings`
       : "http://localhost:11434/api/embeddings";
@@ -359,7 +364,7 @@ const skillAutoInjectionPlugin = {
       api.logger.info?.(`[skill-auto-injection] before_agent_start triggered, prompt length: ${prompt.length}, first 100 chars: "${prompt.slice(0, 100)}"`);
 
       try {
-        const skills = await getOrCacheSkills(api, embeddingUrl, embeddingModel, config);
+        const skills = await getOrCacheSkills(api, embeddingUrl, embeddingModel, config, minimaxApiKey, openaiApiKey);
         if (skills.length === 0) {
           api.logger.info?.(`[skill-auto-injection] no skills loaded, skipping`);
           return;
@@ -389,7 +394,7 @@ const skillAutoInjectionPlugin = {
         let wasTranslated = false;
 
         if (!skipTranslation) {
-          const translated = await translateToEnglish(prompt, config);
+          const translated = await translateToEnglish(prompt, config, minimaxApiKey, openaiApiKey);
           if (translated && translated !== prompt) {
             api.logger.info?.(`[skill-auto-injection] translated: "${prompt.slice(0, 50)}..." -> "${translated.slice(0, 50)}..."`);
             matchText = translated;
