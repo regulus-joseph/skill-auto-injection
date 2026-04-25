@@ -4,8 +4,12 @@
  * using embedding similarity, and injects matched skills into context
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  cosineSimilarity,
+  keywordMatch,
+  hasEnglishCharacters,
+  parseSkillMarkdown,
+} from "./utils.js";
 
 interface SkillAutoInjectionConfig {
   enabled?: boolean;
@@ -23,6 +27,11 @@ interface SkillAutoInjectionConfig {
     skillMatchThreshold?: number;
     maxSkills?: number;
   };
+  keyword?: {
+    enabled?: boolean;
+    model?: string;
+    baseURL?: string;
+  };
   deliveryTaskPatterns?: string[];
 }
 
@@ -35,6 +44,7 @@ interface SkillInfo {
 interface CachedSkill {
   info: SkillInfo;
   embedding: number[];
+  keywords: string[];
 }
 
 let cachedSkills: CachedSkill[] = [];
@@ -168,21 +178,87 @@ async function translateWithOpenAI(text: string, _model: string): Promise<string
   }
 }
 
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return 0;
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
+async function extractKeywordsFromDescription(
+  description: string,
+  skillName: string,
+  config: SkillAutoInjectionConfig
+): Promise<string[]> {
+  const kwConfig = config.keyword ?? {};
+  if (kwConfig.enabled === false) return [];
+
+  const provider = config.translate?.provider ?? "ollama";
+  const model = kwConfig.model ?? config.translate?.model ?? "qwen2.5:7b";
+  const baseURL = kwConfig.baseURL ?? config.embedding?.baseURL ?? "http://localhost:11434";
+
+  const prompt = `You are a keyword extractor. Given a skill description, extract 3-5 short English trigger keywords (single words or simple phrases) that users would likely type to invoke this skill. Return ONLY a JSON array of strings, nothing else.
+
+Skill name: ${skillName}
+Description: ${description}
+
+Respond with a JSON array, e.g.: ["git", "commit", "version control"]`;
+
+  try {
+    let text: string;
+    if (provider === "ollama") {
+      const resp = await fetch(`${baseURL.replace("/api/embeddings", "")}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, prompt, stream: false }),
+      });
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      text = data.response?.trim() ?? "";
+    } else if (provider === "minimax") {
+      const apiKey = process.env.MINIMAX_API_KEY;
+      if (!apiKey) return [];
+      const resp = await fetch("https://api.minimaxi.com/v1/text/chatcompletion_pro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: "abab6.5s-chat",
+          messages: [
+            { role: "system", content: "You are a keyword extractor. Return ONLY a JSON array of strings, nothing else." },
+            { role: "user", content: prompt }
+          ],
+        }),
+      });
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      text = data.choices?.[0]?.message?.content?.trim() ?? "";
+    } else {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) return [];
+      const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "You are a keyword extractor. Return ONLY a JSON array of strings, nothing else." },
+            { role: "user", content: prompt }
+          ],
+        }),
+      });
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      text = data.choices?.[0]?.message?.content?.trim() ?? "";
+    }
+
+    const jsonMatch = text.match(/\[[\s\S]*?\]/);
+    if (!jsonMatch) return [];
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((k): k is string => typeof k === "string" && k.length > 0)
+      .map(k => k.toLowerCase().trim());
+  } catch {
+    return [];
   }
-  if (normA === 0 || normB === 0) return 0;
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
 async function loadSkillsFromDir(dirPath: string): Promise<SkillInfo[]> {
+  const { readdir, readFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
   const skills: SkillInfo[] = [];
   try {
     const entries = await readdir(dirPath, { withFileTypes: true });
@@ -195,51 +271,22 @@ async function loadSkillsFromDir(dirPath: string): Promise<SkillInfo[]> {
         const { name, description } = parseSkillMarkdown(content, entry.name);
         skills.push({ name, description, path: skillPath });
       } catch {
-        // Skip if SKILL.md not found
       }
     }
   } catch {
-    // Directory doesn't exist
   }
   return skills;
-}
-
-function parseSkillMarkdown(content: string, fallbackName: string): { name: string; description: string } {
-  const lines = content.split("\n");
-  let name = fallbackName;
-  let description = "";
-  let inDescription = false;
-  const descriptionLines: string[] = [];
-
-  for (const line of lines) {
-    if (line.startsWith("name:")) {
-      name = line.replace("name:", "").trim();
-    } else if (line.startsWith("description:")) {
-      inDescription = true;
-      const desc = line.replace("description:", "").replace(/^>\s*/, "").trim();
-      if (desc) descriptionLines.push(desc);
-    } else if (inDescription && line.trim() === "") {
-      inDescription = false;
-    } else if (inDescription && line.startsWith(" ")) {
-      const trimmed = line.trim().replace(/^>\s*/, "");
-      if (trimmed) descriptionLines.push(trimmed);
-    } else if (inDescription) {
-      const trimmed = line.trim().replace(/^>\s*/, "");
-      if (trimmed && !trimmed.startsWith("#") && !trimmed.startsWith("-")) {
-        descriptionLines.push(trimmed);
-      }
-    }
-  }
-
-  description = descriptionLines.join(" ").trim();
-  return { name, description };
 }
 
 async function getOrCacheSkills(
   api: OpenClawPluginApi,
   embeddingUrl: string,
-  embeddingModel: string
+  embeddingModel: string,
+  config: SkillAutoInjectionConfig
 ): Promise<CachedSkill[]> {
+  const { readdir, readFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+
   const now = Date.now();
   if (cachedSkills.length > 0 && now - lastCacheTime < CACHE_TTL_MS) {
     return cachedSkills;
@@ -265,9 +312,12 @@ async function getOrCacheSkills(
   const cached: CachedSkill[] = [];
   for (const [, info] of uniqueSkills) {
     if (!info.description) continue;
-    const embedding = await getEmbedding(info.description, embeddingUrl, embeddingModel);
+    const [embedding, keywords] = await Promise.all([
+      getEmbedding(info.description, embeddingUrl, embeddingModel),
+      extractKeywordsFromDescription(info.description, info.name, config),
+    ]);
     if (embedding.length > 0) {
-      cached.push({ info, embedding });
+      cached.push({ info, embedding, keywords });
     }
   }
 
@@ -298,7 +348,7 @@ const skillAutoInjectionPlugin = {
     const embeddingModel = config.embedding?.model ?? "bge-m3";
     const threshold = config.matching?.skillMatchThreshold ?? 0.6;
     const maxSkills = config.matching?.maxSkills ?? 3;
-const translateEnabled = config.translate?.enabled ?? true;
+    const translateEnabled = config.translate?.enabled ?? true;
 
     api.logger.info?.("[skill-auto-injection] register called");
 
@@ -309,16 +359,36 @@ const translateEnabled = config.translate?.enabled ?? true;
       api.logger.info?.(`[skill-auto-injection] before_agent_start triggered, prompt length: ${prompt.length}, first 100 chars: "${prompt.slice(0, 100)}"`);
 
       try {
-        const skills = await getOrCacheSkills(api, embeddingUrl, embeddingModel);
+        const skills = await getOrCacheSkills(api, embeddingUrl, embeddingModel, config);
         if (skills.length === 0) {
           api.logger.info?.(`[skill-auto-injection] no skills loaded, skipping`);
           return;
         }
 
+        const L1Matched = skills.filter(s => keywordMatch(prompt, s.keywords));
+
+        if (L1Matched.length > 0) {
+          api.logger.info?.(`[skill-auto-injection] L1 keyword match hit: ${L1Matched.map(s => s.info.name).join(", ")}`);
+          const topSkills = L1Matched.slice(0, maxSkills).map(s => ({
+            name: s.info.name,
+            description: s.info.description.slice(0, 200),
+            score: 1.0,
+          }));
+
+          const skillsText = topSkills
+            .map(s => `- [${s.name}]: ${s.description}`)
+            .join("\n");
+
+          return {
+            prependContext: `[Skill Auto-Injection] The current conversation may involve these available skills:\n${skillsText}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`
+          };
+        }
+
+        const skipTranslation = !translateEnabled || hasEnglishCharacters(prompt);
         let matchText = prompt;
         let wasTranslated = false;
 
-        if (translateEnabled) {
+        if (!skipTranslation) {
           const translated = await translateToEnglish(prompt, config);
           if (translated && translated !== prompt) {
             api.logger.info?.(`[skill-auto-injection] translated: "${prompt.slice(0, 50)}..." -> "${translated.slice(0, 50)}..."`);
@@ -327,6 +397,8 @@ const translateEnabled = config.translate?.enabled ?? true;
           } else {
             api.logger.info?.(`[skill-auto-injection] translation returned same text or failed, using original`);
           }
+        } else {
+          api.logger.info?.(`[skill-auto-injection] skipping translation (query has English or translation disabled)`);
         }
 
         const promptEmbedding = await getEmbedding(matchText, embeddingUrl, embeddingModel);

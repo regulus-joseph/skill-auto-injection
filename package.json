@@ -1,18 +1,44 @@
 {
   "name": "skill-auto-injection",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Auto-match user delivery task with available skills for better agent responses",
   "main": "src/index.ts",
   "openclaw": {
     "extensions": [
       "./src/index.ts"
-    ]
+    ],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.3.24-beta.2"
+    },
+    "build": {
+      "openclawVersion": "2026.3.24-beta.2",
+      "pluginSdkVersion": "2026.3.24-beta.2"
+    }
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.49"
   },
+  "devDependencies": {
+    "@vitest/ui": "^4.1.5",
+    "vitest": "^4.1.5"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "changelog": [
+    {
+      "version": "0.3.0",
+      "date": "2026-04-25",
+      "changes": [
+        "L1 keyword match: zero-cost keyword trigger before embedding",
+        "LLM keyword extraction on skill load (3-5 trigger keywords per skill)",
+        "Skip translation when query already contains English characters",
+        "L1+L2 cascade: keyword match first, embed fallback"
+      ]
+    },
     {
       "version": "0.2.0",
       "date": "2026-04-22",

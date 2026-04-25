@@ -2,7 +2,7 @@
   "id": "skill-auto-injection",
   "name": "Skill Auto-Injection",
   "description": "Auto-match user delivery task with available skills using embedding similarity",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "kind": "utility",
   "configSchema": {
     "type": "object",
@@ -24,10 +24,10 @@
         "type": "object",
         "properties": {
           "enabled": { "type": "boolean", "default": true },
-          "provider": { 
-            "type": "string", 
+          "provider": {
+            "type": "string",
             "enum": ["ollama", "minimax", "openai"],
-            "default": "ollama" 
+            "default": "ollama"
           },
           "model": { "type": "string", "default": "qwen2.5:7b" }
         }
@@ -47,6 +47,14 @@
             "maximum": 10,
             "default": 3
           }
+        }
+      },
+      "keyword": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean", "default": true },
+          "model": { "type": "string", "default": "qwen2.5:7b" },
+          "baseURL": { "type": "string" }
         }
       },
       "deliveryTaskPatterns": {

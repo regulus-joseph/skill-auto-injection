@@ -8,15 +8,17 @@
 |---------|------|---------|
 | 0.1.0 | 2026-04-22 | Initial version: embedding-based skill matching |
 | 0.2.0 | 2026-04-22 | Add multi-provider translation (ollama/minimax/openai), optimize logging |
+| 0.3.0 | 2026-04-25 | L1 keyword match (zero-cost) + L2 embed cascade; LLM keyword extraction on skill load; skip translation for English queries |
 
 ## Features
 
-- **Delivery Task Detection**: Detect if user input is a delivery task via embedding similarity
+- **Two-Tier Matching**: L1 keyword match (instant, zero LLM cost) + L2 embedding fallback (semantic, cross-language)
+- **LLM Keyword Extraction**: On skill load, extract 3-5 trigger keywords via LLM — no manual whitelist maintenance
+- **Smart Translation**: Skip translation when query already contains English characters
 - **Skill Matching**: Match user input against skill descriptions using embedding models
-- **Auto-Translation**: Translate non-English input to English for cross-language matching
 - **Multi-Provider Translation**: Support Ollama, MiniMax, OpenAI translation providers
 - **Context Injection**: Auto-inject matched skills via `before_agent_start` hook
-- **Caching**: Cache skill embeddings for 5 minutes to avoid repeated computation
+- **Caching**: Cache skill embeddings and keywords for 5 minutes to avoid repeated computation
 
 ## Project Structure
 
@@ -24,8 +26,12 @@
 skill-auto-injection/
 ├── openclaw.plugin.json    # Plugin configuration
 ├── package.json          # Node.js package config
+├── vitest.config.ts     # Test configuration
 ├── src/
-│   └── index.ts          # Plugin entry point
+│   ├── index.ts          # Plugin entry point
+│   └── utils.ts          # Pure utility functions
+├── tests/
+│   └── utils.test.ts     # Unit tests (34 passing)
 └── README.md
 ```
 
@@ -62,6 +68,11 @@ openclaw gateway restart
           "matching": {
             "skillMatchThreshold": 0.6,
             "maxSkills": 3
+          },
+          "keyword": {
+            "enabled": true,
+            "model": "qwen2.5:7b",
+            "baseURL": null
           }
         }
       }
@@ -83,6 +94,9 @@ openclaw gateway restart
 | `translate.model` | Translation model | `qwen2.5:7b` |
 | `matching.skillMatchThreshold` | Skill match threshold (0-1) | `0.6` |
 | `matching.maxSkills` | Max skills to inject | `3` |
+| `keyword.enabled` | Enable L1 keyword matching | `true` |
+| `keyword.model` | LLM model for keyword extraction | `qwen2.5:7b` |
+| `keyword.baseURL` | Override baseURL for keyword LLM | `null` (uses embedding.baseURL) |
 
 ### Translation Provider Config
 
@@ -95,13 +109,21 @@ openclaw gateway restart
 ## Workflow
 
 ```
-User Message → before_agent_start hook →
-  (optional) Translate to English →
-  Get embedding →
-  Match against all skills →
-  Filter by threshold →
-  Inject into prependContext
+User Message → before_agent_start hook
+  │
+  ├── L1: Keyword Match (zero cost)
+  │     Extract English tokens from query
+  │     Check against skill trigger keywords
+  │     → HIT → Inject matched skills immediately
+  │
+  └── L2: Embedding Fallback (only if L1 misses)
+        Query has English chars? → Skip translation
+        Otherwise → Translate to English
+        Get embedding → Cosine similarity → Filter by threshold
+        → Inject top-N matched skills
 ```
+
+**Keywords are extracted by LLM when skills are loaded** (cached for 5 min) — no manual maintenance required.
 
 ## Skills Source
 
@@ -122,6 +144,15 @@ When skills are matched, prepends:
 Please consider using relevant skills to fulfill the user's request if applicable.
 ```
 
+## Testing
+
+```bash
+npm test          # Run all tests
+npm run test:watch  # Watch mode
+```
+
+**34 unit tests** covering keyword matching, tokenization, cosine similarity, markdown parsing, and L1/L2 cascade logic.
+
 ## Debugging
 
 ```bash
@@ -138,13 +169,11 @@ openclaw gateway restart
 ## Future Improvements
 
 1. **Bundled Skills Support**: Scan OpenClaw builtin skills directory
-2. **Delivery Task Detection**: Dedicated delivery pattern detection (not just embedding)
-3. **Whitelist Management**: Configurable skill whitelist
-4. **Exclusion List**: Exclude specific skills from auto-matching
-5. **Real-time Translation**: Use faster translation for lower latency
+2. **Exclusion List**: Exclude specific skills from auto-matching
+3. **User Feedback Loop**: Learn from user corrections (skill was/wasn't helpful)
+4. **Skill Auto-Install**: Auto-install from ClawHub when high-confidence match but skill not installed
 
 ## References
 
 - [OpenClaw Plugin SDK](https://github.com/openclaw/openclaw)
-- [memory-recall plugin](../memory-recall)
 - [bge-m3 embedding](https://ollama.com/)
