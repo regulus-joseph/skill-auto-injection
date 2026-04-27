@@ -10,7 +10,7 @@ import {
   extractKeywords,
   cosineSimilarity,
   type LLMConfig,
-} from "../../../llm-connector/src/ts/connector.js";
+} from "../../llm-connector/src/ts/connector.ts";
 import {
   hasEnglishCharacters,
   parseSkillMarkdown,
