@@ -1,6 +1,6 @@
 {
   "name": "skill-auto-injection",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "description": "Auto-match user delivery task with available skills for better agent responses",
   "main": "src/index.ts",
@@ -29,6 +29,13 @@
     "test:watch": "vitest"
   },
   "changelog": [
+    {
+      "version": "0.3.1",
+      "date": "2026-04-27",
+      "changes": [
+        "fix: correct import path to llm-connector (2 levels up, .ts extension)"
+      ]
+    },
     {
       "version": "0.3.0",
       "date": "2026-04-25",
