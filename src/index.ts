@@ -1,12 +1,17 @@
 /**
- * Skill Auto-Injection Plugin
- * Automatically matches user delivery task with available skills
- * using embedding similarity, and injects matched skills into context
+ * skill-auto-injection/src/index.ts
+ * ==================================
+ * 更新: LLM 调用改用 llm-connector，env 引用 shared-lib
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import {
+  getEmbedding,
+  translateToEnglish,
+  extractKeywords,
   cosineSimilarity,
-  keywordMatch,
+  type LLMConfig,
+} from "../../../llm-connector/src/ts/connector.js";
+import {
   hasEnglishCharacters,
   parseSkillMarkdown,
 } from "./utils.js";
@@ -58,96 +63,6 @@ function parsePluginConfig(value: unknown): SkillAutoInjectionConfig {
   return value as SkillAutoInjectionConfig;
 }
 
-async function getEmbedding(
-  text: string,
-  baseUrl: string,
-  model: string
-): Promise<number[]> {
-  try {
-    const resp = await fetch(baseUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, prompt: text }),
-    });
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    return data.embedding ?? [];
-  } catch {
-    return [];
-  }
-}
-
-async function translateToEnglish(
-  text: string,
-  config: SkillAutoInjectionConfig
-): Promise<string | null> {
-  const translateConfig = config.translate ?? {};
-
-  if (translateConfig.enabled === false) {
-    return null;
-  }
-
-  const baseUrl = config.embedding?.baseURL ?? "http://localhost:11434";
-  const model = translateConfig.model ?? "qwen2.5:7b";
-
-  try {
-    const resp = await fetch(`${baseUrl.replace("/api/embeddings", "")}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        prompt: `Translate the following user request to English. Only respond with the translation, nothing else.\n\nUser request: ${text}`,
-        stream: false,
-      }),
-    });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    return data.response?.trim() ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function extractKeywordsFromDescription(
-  description: string,
-  skillName: string,
-  config: SkillAutoInjectionConfig
-): Promise<string[]> {
-  const kwConfig = config.keyword ?? {};
-  if (kwConfig.enabled === false) return [];
-
-  const model = kwConfig.model ?? config.translate?.model ?? "qwen2.5:7b";
-  const baseURL = kwConfig.baseURL ?? config.embedding?.baseURL ?? "http://localhost:11434";
-
-  const prompt = `You are a keyword extractor. Given a skill description, extract 3-5 short English trigger keywords (single words or simple phrases) that users would likely type to invoke this skill. Return ONLY a JSON array of strings, nothing else.
-
-Skill name: ${skillName}
-Description: ${description}
-
-Respond with a JSON array, e.g.: ["git", "commit", "version control"]`;
-
-  try {
-    const resp = await fetch(`${baseURL.replace("/api/embeddings", "")}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, prompt, stream: false }),
-    });
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    const text = data.response?.trim() ?? "";
-
-    const jsonMatch = text.match(/\[[\s\S]*?\]/);
-    if (!jsonMatch) return [];
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((k): k is string => typeof k === "string" && k.length > 0)
-      .map(k => k.toLowerCase().trim());
-  } catch {
-    return [];
-  }
-}
-
 async function loadSkillsFromDir(dirPath: string): Promise<SkillInfo[]> {
   const { readdir, readFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
@@ -172,9 +87,7 @@ async function loadSkillsFromDir(dirPath: string): Promise<SkillInfo[]> {
 
 async function getOrCacheSkills(
   api: OpenClawPluginApi,
-  embeddingUrl: string,
-  embeddingModel: string,
-  config: SkillAutoInjectionConfig
+  cfg: LLMConfig,
 ): Promise<CachedSkill[]> {
   const { readdir, readFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
@@ -205,8 +118,8 @@ async function getOrCacheSkills(
   for (const [, info] of uniqueSkills) {
     if (!info.description) continue;
     const [embedding, keywords] = await Promise.all([
-      getEmbedding(info.description, embeddingUrl, embeddingModel),
-      extractKeywordsFromDescription(info.description, info.name, config),
+      getEmbedding(info.description, cfg),
+      extractKeywords(info.description, info.name, cfg),
     ]);
     if (embedding.length > 0) {
       cached.push({ info, embedding, keywords });
@@ -234,13 +147,15 @@ const skillAutoInjectionPlugin = {
       return;
     }
 
-    const embeddingUrl = config.embedding?.baseURL
-      ? `${config.embedding.baseURL}/api/embeddings`
-      : "http://localhost:11434/api/embeddings";
-    const embeddingModel = config.embedding?.model ?? "bge-m3";
     const threshold = config.matching?.skillMatchThreshold ?? 0.6;
     const maxSkills = config.matching?.maxSkills ?? 3;
     const translateEnabled = config.translate?.enabled ?? true;
+
+    const llmCfg: LLMConfig = {
+      baseUrl:     config.embedding?.baseURL,
+      embedModel:  config.embedding?.model,
+      llmModel:    config.translate?.model,
+    };
 
     api.logger.info?.("[skill-auto-injection] register called");
 
@@ -248,29 +163,25 @@ const skillAutoInjectionPlugin = {
       const prompt = event.prompt;
       if (!prompt || prompt.length < 5) return;
 
-      api.logger.info?.(`[skill-auto-injection] before_agent_start triggered, prompt length: ${prompt.length}, first 100 chars: "${prompt.slice(0, 100)}"`);
-
       try {
-        const skills = await getOrCacheSkills(api, embeddingUrl, embeddingModel, config);
-        if (skills.length === 0) {
-          api.logger.info?.(`[skill-auto-injection] no skills loaded, skipping`);
-          return;
-        }
+        const skills = await getOrCacheSkills(api, llmCfg);
+        if (skills.length === 0) return;
 
-        const L1Matched = skills.filter(s => keywordMatch(prompt, s.keywords));
+        const L1Matched = skills.filter(s => {
+          return s.keywords.some(kw =>
+            prompt.toLowerCase().includes(kw.toLowerCase())
+          );
+        });
 
         if (L1Matched.length > 0) {
-          api.logger.info?.(`[skill-auto-injection] L1 keyword match hit: ${L1Matched.map(s => s.info.name).join(", ")}`);
           const topSkills = L1Matched.slice(0, maxSkills).map(s => ({
             name: s.info.name,
             description: s.info.description.slice(0, 200),
             score: 1.0,
           }));
-
           const skillsText = topSkills
             .map(s => `- [${s.name}]: ${s.description}`)
             .join("\n");
-
           return {
             prependContext: `[Skill Auto-Injection] The current conversation may involve these available skills:\n${skillsText}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`
           };
@@ -281,29 +192,19 @@ const skillAutoInjectionPlugin = {
         let wasTranslated = false;
 
         if (!skipTranslation) {
-          const translated = await translateToEnglish(prompt, config);
+          const translated = await translateToEnglish(prompt, llmCfg);
           if (translated && translated !== prompt) {
-            api.logger.info?.(`[skill-auto-injection] translated: "${prompt.slice(0, 50)}..." -> "${translated.slice(0, 50)}..."`);
             matchText = translated;
             wasTranslated = true;
-          } else {
-            api.logger.info?.(`[skill-auto-injection] translation returned same text or failed, using original`);
           }
-        } else {
-          api.logger.info?.(`[skill-auto-injection] skipping translation (query has English or translation disabled)`);
         }
 
-        const promptEmbedding = await getEmbedding(matchText, embeddingUrl, embeddingModel);
-        if (promptEmbedding.length === 0) {
-          api.logger.info?.(`[skill-auto-injection] failed to get embedding for prompt`);
-          return;
-        }
+        const promptEmbedding = await getEmbedding(matchText, llmCfg);
+        if (promptEmbedding.length === 0) return;
 
         const matchedSkills: Array<{ name: string; description: string; score: number; wasTranslated?: boolean }> = [];
-
         for (const skill of skills) {
           const score = cosineSimilarity(promptEmbedding, skill.embedding);
-          api.logger.info?.(`[skill-auto-injection] score for ${skill.info.name}: ${(score * 100).toFixed(1)}%`);
           if (score >= threshold) {
             matchedSkills.push({
               name: skill.info.name,
@@ -318,13 +219,9 @@ const skillAutoInjectionPlugin = {
 
         matchedSkills.sort((a, b) => b.score - a.score);
         const topSkills = matchedSkills.slice(0, maxSkills);
-
-        api.logger.info?.(`[skill-auto-injection] matched ${topSkills.length} skills (translated=${wasTranslated}): ${topSkills.map(s => `${s.name}(${(s.score * 100).toFixed(0)}%)`).join(", ")}`);
-
         const skillsText = topSkills
           .map(s => `- [${s.name}]: ${s.description}`)
           .join("\n");
-
         const translationNote = wasTranslated ? "\n(Note: User request was translated to English for matching.)" : "";
 
         return {
