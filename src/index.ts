@@ -52,9 +52,17 @@ interface CachedSkill {
   keywords: string[];
 }
 
+interface SkillMeta {
+  hash: string;
+  computedAt: string;
+  embedding: number[];
+  keywords: string[];
+}
+
 let cachedSkills: CachedSkill[] = [];
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const META_TTL_DAYS = 7;
 
 function parsePluginConfig(value: unknown): SkillAutoInjectionConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -63,33 +71,87 @@ function parsePluginConfig(value: unknown): SkillAutoInjectionConfig {
   return value as SkillAutoInjectionConfig;
 }
 
-async function loadSkillsFromDir(dirPath: string): Promise<SkillInfo[]> {
-  const { readdir, readFile } = await import("node:fs/promises");
+async function simpleHash(content: string): Promise<string> {
+  const { createHash } = await import("node:crypto");
+  return createHash("sha256").update(content).digest("hex").slice(0, 16);
+}
+
+async function loadSkillWithMeta(
+  skillDir: string,
+  cfg: LLMConfig,
+  api: OpenClawPluginApi,
+): Promise<CachedSkill | null> {
+  const { readFile, writeFile, readdir, stat } = await import("node:fs/promises");
   const { join } = await import("node:path");
-  const skills: SkillInfo[] = [];
+
+  const skillMdPath = join(skillDir, "SKILL.md");
+  const metaPath = join(skillDir, "skill-meta.json");
+
+  let content: string;
+  try {
+    content = await readFile(skillMdPath, "utf-8");
+  } catch {
+    return null;
+  }
+
+  const { name, description } = parseSkillMarkdown(content, skillDir.split("/").pop() ?? skillDir);
+  if (!description) return null;
+
+  const contentHash = await simpleHash(content);
+  let meta: SkillMeta | null = null;
+  let stale = true;
+
+  try {
+    const raw = await readFile(metaPath, "utf-8");
+    meta = JSON.parse(raw) as SkillMeta;
+    if (meta.hash === contentHash && meta.embedding?.length > 0) {
+      stale = false;
+    }
+  } catch { /* no meta yet */ }
+
+  if (stale) {
+    api.logger.info?.(`[skill-auto-injection] computing embedding for ${name}...`);
+    const [embedding, keywords] = await Promise.all([
+      getEmbedding(description, cfg),
+      extractKeywords(description, name, cfg),
+    ]);
+    if (embedding.length === 0) return null;
+    meta = {
+      hash: contentHash,
+      computedAt: new Date().toISOString(),
+      embedding,
+      keywords,
+    };
+    try {
+      await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+      api.logger.info?.(`[skill-auto-injection] cached embedding for ${name}`);
+    } catch {
+      /* non-fatal */
+    }
+  } else {
+    api.logger.info?.(`[skill-auto-injection] using cached embedding for ${name}`);
+  }
+
+  return { info: { name, description, path: skillDir }, embedding: meta.embedding, keywords: meta.keywords };
+}
+
+async function listSkillDirs(dirPath: string): Promise<string[]> {
+  const { readdir } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const dirs: string[] = [];
   try {
     const entries = await readdir(dirPath, { withFileTypes: true });
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const skillPath = join(dirPath, entry.name);
-      const skillMdPath = join(skillPath, "SKILL.md");
-      try {
-        const content = await readFile(skillMdPath, "utf-8");
-        const { name, description } = parseSkillMarkdown(content, entry.name);
-        skills.push({ name, description, path: skillPath });
-      } catch {
-      }
+      if (entry.isDirectory()) dirs.push(join(dirPath, entry.name));
     }
-  } catch {
-  }
-  return skills;
+  } catch { /* no skills dir */ }
+  return dirs;
 }
 
 async function getOrCacheSkills(
   api: OpenClawPluginApi,
   cfg: LLMConfig,
 ): Promise<CachedSkill[]> {
-  const { readdir, readFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
 
   const now = Date.now();
@@ -101,36 +163,28 @@ async function getOrCacheSkills(
   const skillsDir = join(stateDir, "skills");
   const workspaceSkillsDir = join(stateDir, "..", "workspace", ".openclaw", "skills");
 
-  const [globalSkills, workspaceSkills] = await Promise.all([
-    loadSkillsFromDir(skillsDir),
-    loadSkillsFromDir(workspaceSkillsDir),
+  const [globalDirs, workspaceDirs] = await Promise.all([
+    listSkillDirs(skillsDir),
+    listSkillDirs(workspaceSkillsDir),
   ]);
 
-  const allSkills = [...globalSkills, ...workspaceSkills];
-  const uniqueSkills = new Map<string, SkillInfo>();
-  for (const skill of allSkills) {
-    if (!uniqueSkills.has(skill.name)) {
-      uniqueSkills.set(skill.name, skill);
+  const allDirs = [...globalDirs, ...workspaceDirs];
+  const results = await Promise.all(
+    allDirs.map(dir => loadSkillWithMeta(dir, cfg, api)),
+  );
+
+  const seen = new Map<string, CachedSkill>();
+  for (const cs of results) {
+    if (cs && !seen.has(cs.info.name)) {
+      seen.set(cs.info.name, cs);
     }
   }
 
-  const cached: CachedSkill[] = [];
-  for (const [, info] of uniqueSkills) {
-    if (!info.description) continue;
-    const [embedding, keywords] = await Promise.all([
-      getEmbedding(info.description, cfg),
-      extractKeywords(info.description, info.name, cfg),
-    ]);
-    if (embedding.length > 0) {
-      cached.push({ info, embedding, keywords });
-    }
-  }
-
-  cachedSkills = cached;
+  cachedSkills = Array.from(seen.values());
   lastCacheTime = now;
-  api.logger.info?.(`[skill-auto-injection] loaded ${cached.length} skills with embeddings`);
+  api.logger.info?.(`[skill-auto-injection] loaded ${cachedSkills.length} skills (embedding cached on disk)`);
 
-  return cached;
+  return cachedSkills;
 }
 
 const skillAutoInjectionPlugin = {
