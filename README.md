@@ -24,7 +24,7 @@
 ## Project Structure
 
 ```
-skill-auto-injection/
+skill-ai-inject/
 ├── openclaw.plugin.json    # Plugin configuration
 ├── package.json          # Node.js package config
 ├── vitest.config.ts     # Test configuration
@@ -39,7 +39,7 @@ skill-auto-injection/
 ## Installation
 
 ```bash
-cd ~/projects/skill-auto-injection
+cd ~/projects/skill-ai-inject
 npm install
 npm run build
 openclaw plugins install --link .
@@ -54,7 +54,7 @@ openclaw gateway restart
 {
   "plugins": {
     "entries": {
-      "skill-auto-injection": {
+      "skill-ai-inject": {
         "enabled": true,
         "config": {
           "embedding": {
@@ -155,7 +155,7 @@ npm run test:watch  # Watch mode
 
 ```bash
 # View plugin logs
-openclaw logs 2>&1 | grep skill-auto-injection
+openclaw logs 2>&1 | grep skill-ai-inject
 
 # List skills
 openclaw skills list
