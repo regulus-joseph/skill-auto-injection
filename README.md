@@ -32,7 +32,7 @@ skill-auto-injection/
 │   ├── index.ts          # Plugin entry point
 │   └── utils.ts          # Pure utility functions
 ├── tests/
-│   └── utils.test.ts     # Unit tests (34 passing)
+│   └── utils.test.ts     # Unit tests (29 passing)
 └── README.md
 ```
 
@@ -148,7 +148,7 @@ npm test          # Run all tests
 npm run test:watch  # Watch mode
 ```
 
-**34 unit tests** covering keyword matching, tokenization, cosine similarity, markdown parsing, and L1/L2 cascade logic.
+**29 unit tests** covering tokenization, cosine similarity, simpleHash, and L1 keyword scoring.
 
 ## Debugging
 

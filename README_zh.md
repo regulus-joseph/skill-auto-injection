@@ -32,7 +32,7 @@ skill-auto-injection/
 │   ├── index.ts            # 插件入口
 │   └── utils.ts            # 纯工具函数
 ├── tests/
-│   └── utils.test.ts       # 单元测试（34 个通过）
+│   └── utils.test.ts       # 单元测试（29 个通过）
 └── README.md
 ```
 
@@ -148,7 +148,7 @@ npm test          # 运行所有测试
 npm run test:watch  # 监听模式
 ```
 
-**34 个单元测试**，覆盖关键字匹配、分词、余弦相似度、markdown 解析和 L1/L2 级联逻辑。
+**29 个单元测试**，覆盖分词、余弦相似度、simpleHash 和 L1 关键字评分逻辑。
 
 ## 调试
 
