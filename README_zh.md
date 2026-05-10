@@ -6,6 +6,7 @@
 
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
+| 0.4.0 | 2026-05-10 | 反转 L1 匹配方向（prompt→skill 关键字）；切换至 `before_prompt_build` 钩子；命中比率评分；新增 l2CandidateCount 配置 |
 | 0.1.0 | 2026-04-22 | 初始版本：基于 embedding 的技能匹配 |
 | 0.2.0 | 2026-04-22 | 添加多提供商翻译（ollama/minimax/openai），优化日志 |
 | 0.3.0 | 2026-04-25 | L1 关键字匹配（零开销）+ L2 embedding 级联；LLM 提取技能关键字；英文 query 跳过翻译 |
@@ -17,7 +18,7 @@
 - **智能翻译**：query 已含英文字符时跳过翻译
 - **技能匹配**：使用 embedding 模型将用户输入与技能描述进行匹配
 - **纯 Ollama 翻译**：使用本地 Ollama 进行翻译和关键字提取，无需外部 API key
-- **上下文注入**：通过 `before_agent_start` 钩子自动注入匹配到的技能
+- **上下文注入**：通过 `before_prompt_build` 钩子自动注入匹配到的技能
 - **缓存**：技能 embedding 和关键字缓存 5 分钟，避免重复计算
 
 ## 项目结构
@@ -66,7 +67,9 @@ openclaw gateway restart
           },
           "matching": {
             "skillMatchThreshold": 0.6,
-            "maxSkills": 3
+            "maxSkills": 3,
+            "minKeywordMatch": 1,
+            "l2CandidateCount": 20
           },
           "keyword": {
             "enabled": true,
@@ -92,6 +95,8 @@ openclaw gateway restart
 | `translate.model` | 翻译模型 | `qwen2.5:7b` |
 | `matching.skillMatchThreshold` | 技能匹配阈值 (0-1) | `0.6` |
 | `matching.maxSkills` | 最大注入技能数 | `3` |
+| `matching.minKeywordMatch` | L1 命中最少关键字数 | `1` |
+| `matching.l2CandidateCount` | L2 embedding 阶段最大候选数 | `20` |
 | `keyword.enabled` | 启用 L1 关键字匹配 | `true` |
 | `keyword.model` | 关键字提取 LLM 模型 | `qwen2.5:7b` |
 | `keyword.baseURL` | 覆盖关键字 LLM 的 baseURL | `null`（复用 embedding.baseURL）|
@@ -101,11 +106,11 @@ openclaw gateway restart
 ## 工作流程
 
 ```
-用户消息 → before_agent_start 钩子
+用户消息 → before_prompt_build 钩子
   │
   ├── L1: 关键字匹配（零开销）
-  │     从 query 中提取英文 token
-  │     与技能触发关键字匹配
+  │     从 prompt 中提取英文 token
+  │     与技能触发关键字匹配（命中比率评分）
   │     → 命中 → 立即注入匹配到的技能
   │
   └── L2: Embedding 回退（仅 L1 未命中时）

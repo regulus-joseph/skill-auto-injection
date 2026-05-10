@@ -6,6 +6,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.4.0 | 2026-05-10 | Reverse L1 matching direction (prompt→skill keywords); switch to `before_prompt_build` hook; hit-ratio scoring; l2CandidateCount config |
 | 0.1.0 | 2026-04-22 | Initial version: embedding-based skill matching |
 | 0.2.0 | 2026-04-22 | Add multi-provider translation (ollama/minimax/openai), optimize logging |
 | 0.3.0 | 2026-04-25 | L1 keyword match (zero-cost) + L2 embed cascade; LLM keyword extraction on skill load; skip translation for English queries |
@@ -17,7 +18,7 @@
 - **Smart Translation**: Skip translation when query already contains English characters
 - **Skill Matching**: Match user input against skill descriptions using embedding models
 - **Ollama-Only Translation**: Uses local Ollama for translation and keyword extraction — no external API keys required
-- **Context Injection**: Auto-inject matched skills via `before_agent_start` hook
+- **Context Injection**: Auto-inject matched skills via `before_prompt_build` hook
 - **Caching**: Cache skill embeddings and keywords for 5 minutes to avoid repeated computation
 
 ## Project Structure
@@ -66,7 +67,9 @@ openclaw gateway restart
           },
           "matching": {
             "skillMatchThreshold": 0.6,
-            "maxSkills": 3
+            "maxSkills": 3,
+            "minKeywordMatch": 1,
+            "l2CandidateCount": 20
           },
           "keyword": {
             "enabled": true,
@@ -92,6 +95,8 @@ openclaw gateway restart
 | `translate.model` | Translation model | `qwen2.5:7b` |
 | `matching.skillMatchThreshold` | Skill match threshold (0-1) | `0.6` |
 | `matching.maxSkills` | Max skills to inject | `3` |
+| `matching.minKeywordMatch` | Min keyword hits for L1 match | `1` |
+| `matching.l2CandidateCount` | Max candidates for L2 embedding stage | `20` |
 | `keyword.enabled` | Enable L1 keyword matching | `true` |
 | `keyword.model` | LLM model for keyword extraction | `qwen2.5:7b` |
 | `keyword.baseURL` | Override baseURL for keyword LLM | `null` (uses embedding.baseURL) |
@@ -101,11 +106,11 @@ openclaw gateway restart
 ## Workflow
 
 ```
-User Message → before_agent_start hook
+User Message → before_prompt_build hook
   │
   ├── L1: Keyword Match (zero cost)
-  │     Extract English tokens from query
-  │     Check against skill trigger keywords
+  │     Extract English tokens from prompt
+  │     Match against skill trigger keywords (hit ratio scoring)
   │     → HIT → Inject matched skills immediately
   │
   └── L2: Embedding Fallback (only if L1 misses)

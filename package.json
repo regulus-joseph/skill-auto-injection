@@ -30,6 +30,20 @@
   },
   "changelog": [
     {
+      "version": "0.4.0",
+      "date": "2026-05-10",
+      "changes": [
+        "refactor: reverse L1 keyword matching direction — extract from prompt first, then match skill.keywords",
+        "refactor: switch hook from before_agent_start to before_prompt_build (consistent with memory-recall)",
+        "fix: L1 score now uses hit ratio (hitCount/totalKeywords) instead of binary 1.0",
+        "fix: add l2CandidateCount config for embedding fallback pre-filter",
+        "chore: increase content hash from 16 to 24 chars",
+        "chore: warn log on meta write failure",
+        "chore: remove unused deliveryTaskPatterns config",
+        "chore: remove duplicate cosineSimilarity from utils"
+      ]
+    },
+    {
       "version": "0.3.1",
       "date": "2026-04-27",
       "changes": [
