@@ -3,9 +3,9 @@ import {
   hasEnglishCharacters,
   tokenizeForMatch,
   keywordMatch,
-  cosineSimilarity,
   parseSkillMarkdown,
 } from "../src/utils.ts";
+import { cosineSimilarity } from "../../llm-connector/src/ts/connector.ts";
 
 describe("hasEnglishCharacters", () => {
   it("returns true for pure English text", () => {

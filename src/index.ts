@@ -1,7 +1,8 @@
 /**
  * skill-auto-injection/src/index.ts
  * ==================================
- * 更新: LLM 调用改用 llm-connector，env 引用 shared-lib
+ * L1: keyword extraction from prompt → match against skill.keywords (cheap, zero-cost)
+ * L2: embedding similarity (only if L1 yields no results)
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import {
@@ -13,6 +14,7 @@ import {
 } from "../../llm-connector/src/ts/connector.ts";
 import {
   hasEnglishCharacters,
+  tokenizeForMatch,
   parseSkillMarkdown,
 } from "./utils.js";
 
@@ -31,13 +33,14 @@ interface SkillAutoInjectionConfig {
   matching?: {
     skillMatchThreshold?: number;
     maxSkills?: number;
+    minKeywordMatch?: number;       // L1: min keyword hits to count as match (default 1)
+    l2CandidateCount?: number;       // L2: max skills to consider for embedding fallback
   };
   keyword?: {
     enabled?: boolean;
     model?: string;
     baseURL?: string;
   };
-  deliveryTaskPatterns?: string[];
 }
 
 interface SkillInfo {
@@ -62,7 +65,6 @@ interface SkillMeta {
 let cachedSkills: CachedSkill[] = [];
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const META_TTL_DAYS = 7;
 
 function parsePluginConfig(value: unknown): SkillAutoInjectionConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -73,7 +75,7 @@ function parsePluginConfig(value: unknown): SkillAutoInjectionConfig {
 
 async function simpleHash(content: string): Promise<string> {
   const { createHash } = await import("node:crypto");
-  return createHash("sha256").update(content).digest("hex").slice(0, 16);
+  return createHash("sha256").update(content).digest("hex").slice(0, 24);
 }
 
 async function loadSkillWithMeta(
@@ -81,7 +83,7 @@ async function loadSkillWithMeta(
   cfg: LLMConfig,
   api: OpenClawPluginApi,
 ): Promise<CachedSkill | null> {
-  const { readFile, writeFile, readdir, stat } = await import("node:fs/promises");
+  const { readFile, writeFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
 
   const skillMdPath = join(skillDir, "SKILL.md");
@@ -125,8 +127,8 @@ async function loadSkillWithMeta(
     try {
       await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
       api.logger.info?.(`[skill-auto-injection] cached embedding for ${name}`);
-    } catch {
-      /* non-fatal */
+    } catch (err) {
+      api.logger.warn?.(`[skill-auto-injection] failed to write meta for ${name}: ${String(err)}`);
     }
   } else {
     api.logger.info?.(`[skill-auto-injection] using cached embedding for ${name}`);
@@ -182,7 +184,7 @@ async function getOrCacheSkills(
 
   cachedSkills = Array.from(seen.values());
   lastCacheTime = now;
-  api.logger.info?.(`[skill-auto-injection] loaded ${cachedSkills.length} skills (embedding cached on disk)`);
+  api.logger.info?.(`[skill-auto-injection] loaded ${cachedSkills.length} skills`);
 
   return cachedSkills;
 }
@@ -190,7 +192,7 @@ async function getOrCacheSkills(
 const skillAutoInjectionPlugin = {
   id: "skill-auto-injection",
   name: "Skill Auto-Injection",
-  description: "Auto-match user delivery task with available skills using embedding similarity",
+  description: "Auto-match user delivery task with available skills using keyword + embedding cascade",
   kind: "utility" as const,
 
   register(api: OpenClawPluginApi) {
@@ -203,43 +205,71 @@ const skillAutoInjectionPlugin = {
 
     const threshold = config.matching?.skillMatchThreshold ?? 0.6;
     const maxSkills = config.matching?.maxSkills ?? 3;
+    const minKeywordHits = config.matching?.minKeywordMatch ?? 1;
+    const l2CandidateCount = config.matching?.l2CandidateCount ?? 20;
     const translateEnabled = config.translate?.enabled ?? true;
 
     const llmCfg: LLMConfig = {
-      baseUrl:     config.embedding?.baseURL,
-      embedModel:  config.embedding?.model,
-      llmModel:    config.translate?.model,
+      baseUrl:    config.embedding?.baseURL,
+      embedModel: config.embedding?.model,
+      llmModel:   config.translate?.model,
     };
 
     api.logger.info?.("[skill-auto-injection] register called");
 
-    api.on("before_agent_start", async (event) => {
-      const prompt = event.prompt;
-      if (!prompt || prompt.length < 5) return;
+    api.on("before_prompt_build", async (params: { userMessage?: string }, _ctx) => {
+      const prompt = params?.userMessage ?? "";
+      if (!prompt || prompt.length < 5) return { prependContext: "" };
 
       try {
         const skills = await getOrCacheSkills(api, llmCfg);
-        if (skills.length === 0) return;
+        if (skills.length === 0) return { prependContext: "" };
 
-        const L1Matched = skills.filter(s => {
-          return s.keywords.some(kw =>
-            prompt.toLowerCase().includes(kw.toLowerCase())
-          );
-        });
+        // ── L1: keyword matching ─────────────────────────────────────────
+        // Extract English tokens from prompt, check how many hit each skill's keyword set
+        const promptTokens = tokenizeForMatch(prompt);
+        if (promptTokens.size > 0) {
+          const scored: Array<{ skill: CachedSkill; hitCount: number; total: number }> = [];
+          for (const skill of skills) {
+            if (skill.keywords.length === 0) continue;
+            const kwSet = new Set(skill.keywords.map(k => k.toLowerCase()));
+            let hits = 0;
+            for (const tok of promptTokens) {
+              if (kwSet.has(tok)) hits++;
+            }
+            if (hits >= minKeywordHits) {
+              scored.push({ skill, hitCount: hits, total: skill.keywords.length });
+            }
+          }
 
-        if (L1Matched.length > 0) {
-          const topSkills = L1Matched.slice(0, maxSkills).map(s => ({
-            name: s.info.name,
-            description: s.info.description.slice(0, 200),
-            score: 1.0,
-          }));
-          const skillsText = topSkills
-            .map(s => `- [${s.name}]: ${s.description}`)
-            .join("\n");
-          return {
-            prependContext: `[Skill Auto-Injection] The current conversation may involve these available skills:\n${skillsText}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`
-          };
+          if (scored.length > 0) {
+            // Sort by hit ratio desc, then by hit count desc
+            scored.sort((a, b) => {
+              const ratioA = a.hitCount / a.total;
+              const ratioB = b.hitCount / b.total;
+              if (Math.abs(ratioA - ratioB) > 0.01) return ratioB - ratioA;
+              return b.hitCount - a.hitCount;
+            });
+
+            const topSkills = scored.slice(0, maxSkills).map(({ skill, hitCount, total }) => ({
+              name: skill.info.name,
+              description: skill.info.description.slice(0, 200),
+              score: hitCount / total,
+              layer: "L1" as const,
+            }));
+
+            const skillsText = topSkills
+              .map(s => `- [${s.name}]: ${s.description}`)
+              .join("\n");
+
+            return {
+              prependContext: `[Skill Auto-Injection] The current conversation may involve these available skills:\n${skillsText}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`,
+            };
+          }
         }
+
+        // ── L2: embedding cascade (only when L1 yields nothing) ───────
+        if (skills.length === 0) return { prependContext: "" };
 
         const skipTranslation = !translateEnabled || hasEnglishCharacters(prompt);
         let matchText = prompt;
@@ -254,36 +284,40 @@ const skillAutoInjectionPlugin = {
         }
 
         const promptEmbedding = await getEmbedding(matchText, llmCfg);
-        if (promptEmbedding.length === 0) return;
+        if (promptEmbedding.length === 0) return { prependContext: "" };
 
-        const matchedSkills: Array<{ name: string; description: string; score: number; wasTranslated?: boolean }> = [];
+        // Score all skills by cosine similarity, take top candidates
+        const scored: Array<{ skill: CachedSkill; score: number }> = [];
         for (const skill of skills) {
           const score = cosineSimilarity(promptEmbedding, skill.embedding);
           if (score >= threshold) {
-            matchedSkills.push({
-              name: skill.info.name,
-              description: skill.info.description.slice(0, 200),
-              score,
-              wasTranslated,
-            });
+            scored.push({ skill, score });
           }
         }
 
-        if (matchedSkills.length === 0) return;
+        if (scored.length === 0) return { prependContext: "" };
 
-        matchedSkills.sort((a, b) => b.score - a.score);
-        const topSkills = matchedSkills.slice(0, maxSkills);
+        scored.sort((a, b) => b.score - a.score);
+        const topSkills = scored.slice(0, l2CandidateCount).slice(0, maxSkills).map(({ skill, score }) => ({
+          name: skill.info.name,
+          description: skill.info.description.slice(0, 200),
+          score,
+          layer: "L2" as const,
+          wasTranslated,
+        }));
+
         const skillsText = topSkills
           .map(s => `- [${s.name}]: ${s.description}`)
           .join("\n");
         const translationNote = wasTranslated ? "\n(Note: User request was translated to English for matching.)" : "";
 
         return {
-          prependContext: `[Skill Auto-Injection] The current conversation may involve these available skills:\n${skillsText}${translationNote}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`
+          prependContext: `[Skill Auto-Injection] The current conversation may involve these available skills:\n${skillsText}${translationNote}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`,
         };
 
       } catch (err) {
         api.logger.warn?.(`[skill-auto-injection] matching failed: ${String(err)}`);
+        return { prependContext: "" };
       }
     });
   },
