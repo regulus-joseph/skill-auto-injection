@@ -11,7 +11,7 @@ import {
   extractKeywords,
   cosineSimilarity,
   type LLMConfig,
-} from "../../llm-connector/src/ts/connector.ts";
+} from "./llm-connector.ts";
 import {
   hasEnglishCharacters,
   tokenizeForMatch,
