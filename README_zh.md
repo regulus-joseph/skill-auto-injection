@@ -41,6 +41,7 @@ skill-auto-injection/
 ```bash
 cd ~/projects/skill-auto-injection
 npm install
+npm run build
 openclaw plugins install --link .
 openclaw gateway restart
 ```

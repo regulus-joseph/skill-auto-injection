@@ -3,10 +3,10 @@
   "version": "0.4.0",
   "type": "module",
   "description": "Auto-match user delivery task with available skills for better agent responses",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "openclaw": {
     "extensions": [
-      "./src/index.ts"
+      "./dist/index.js"
     ],
     "compat": {
       "pluginApi": ">=2026.3.24-beta.2",
@@ -22,9 +22,11 @@
   },
   "devDependencies": {
     "@vitest/ui": "^4.1.5",
+    "esbuild": "^0.28.0",
     "vitest": "^4.1.5"
   },
   "scripts": {
+    "build": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.js --platform=node",
     "test": "vitest run",
     "test:watch": "vitest"
   },
