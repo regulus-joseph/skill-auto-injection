@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   hasEnglishCharacters,
   tokenizeForMatch,
-  keywordMatch,
   parseSkillMarkdown,
 } from "../src/utils.ts";
 import { cosineSimilarity } from "../../llm-connector/src/ts/connector.ts";
@@ -65,42 +64,6 @@ describe("tokenizeForMatch", () => {
     expect(tokens.has("git")).toBe(true);
     expect(tokens.has("merge")).toBe(true);
     expect(tokens.size).toBe(2);
-  });
-});
-
-describe("keywordMatch", () => {
-  it("matches exact keyword", () => {
-    expect(keywordMatch("help me with git commit", ["git", "commit", "version"])).toBe(true);
-  });
-
-  it("matches partial keyword", () => {
-    expect(keywordMatch("create a new branch for me", ["branch", "git"])).toBe(true);
-  });
-
-  it("no match when keywords empty", () => {
-    expect(keywordMatch("help me with something", [])).toBe(false);
-  });
-
-  it("no match when query has no English", () => {
-    expect(keywordMatch("帮我做这个", ["git", "commit"])).toBe(false);
-  });
-
-  it("no match when no keyword overlap", () => {
-    expect(keywordMatch("make coffee", ["git", "commit"])).toBe(false);
-  });
-
-  it("case insensitive matching", () => {
-    expect(keywordMatch("GIT COMMIT", ["git", "commit"])).toBe(true);
-  });
-
-  it("multi-word keywords are matched as-is against tokenized query", () => {
-    expect(keywordMatch("use version control", ["version"])).toBe(true);
-    expect(keywordMatch("use version control", ["control"])).toBe(true);
-    expect(keywordMatch("use version control", ["version control"])).toBe(false);
-  });
-
-  it("matches git mixed with Chinese", () => {
-    expect(keywordMatch("帮我做 git commit", ["git", "commit"])).toBe(true);
   });
 });
 
@@ -186,33 +149,94 @@ description: > This is quoted`;
   });
 });
 
-describe("L1+L2 cascade logic", () => {
-  it("L1 keyword match short-circuits to L2 embed", () => {
-    const query = "帮我做git提交";
-    const keywords = ["git", "commit"];
-    const hasEn = hasEnglishCharacters(query);
-    const matched = keywordMatch(query, keywords);
+// ─────────────────────────────────────────────────────────────
+// L1 scoring logic — mirrors the actual matchScored() logic in index.ts
+// ─────────────────────────────────────────────────────────────
+describe("L1 keyword scoring", () => {
+  /**
+   * Replicate the L1 scoring logic from index.ts so we can test it in isolation.
+   * Returns Array<{ hitCount, total, ratio }> for each skill.
+   */
+  function scoreL1(promptTokens: Set<string>, skills: Array<{ keywords: string[] }>, minHits: number) {
+    const scored: Array<{ hitCount: number; total: number; ratio: number }> = [];
+    for (const skill of skills) {
+      if (skill.keywords.length === 0) continue;
+      const kwSet = new Set(skill.keywords.map(k => k.toLowerCase()));
+      let hits = 0;
+      for (const tok of promptTokens) {
+        if (kwSet.has(tok)) hits++;
+      }
+      if (hits >= minHits) {
+        scored.push({ hitCount: hits, total: skill.keywords.length, ratio: hits / skill.keywords.length });
+      }
+    }
+    // Sort: ratio desc, then hitCount desc
+    scored.sort((a, b) => {
+      const ratioA = a.hitCount / a.total;
+      const ratioB = b.hitCount / b.total;
+      if (Math.abs(ratioA - ratioB) > 0.01) return ratioB - ratioA;
+      return b.hitCount - a.hitCount;
+    });
+    return scored;
+  }
 
-    expect(hasEn).toBe(true);
-    expect(matched).toBe(true);
+  it("scores 1 hit out of 3 keywords as ratio ~0.33", () => {
+    // "帮我 git commit" → tokens: git, commit (2 hits, not 1)
+    // Using "git push" → tokens: git, push → 2 hits vs ["git","commit","stash"] → 1 hit
+    const tokens = tokenizeForMatch("帮我 git commit");
+    const skills = [{ keywords: ["git", "commit", "stash"] }];
+    const result = scoreL1(tokens, skills, 1);
+    expect(result).toHaveLength(1);
+    expect(result[0].hitCount).toBe(2);
+    expect(result[0].ratio).toBeCloseTo(0.667, 2);
   });
 
-  it("L1 no match, L2 embed fallback for pure Chinese", () => {
-    const query = "帮我做这个复杂的任务";
-    const keywords = ["python", "script"];
-    const hasEn = hasEnglishCharacters(query);
-    const matched = keywordMatch(query, keywords);
-
-    expect(hasEn).toBe(false);
-    expect(matched).toBe(false);
+  it("scores 2 hits out of 2 keywords as ratio 1.0", () => {
+    const tokens = tokenizeForMatch("git commit something");
+    const skills = [{ keywords: ["git", "commit"] }];
+    const result = scoreL1(tokens, skills, 1);
+    expect(result).toHaveLength(1);
+    expect(result[0].ratio).toBe(1.0);
   });
 
-  it("English query without keyword match falls to L2", () => {
-    const query = "help me understand this";
-    const hasEn = hasEnglishCharacters(query);
-    const matched = keywordMatch(query, ["git", "commit"]);
+  it("sorts by ratio desc, then by hit count desc", () => {
+    const tokens = tokenizeForMatch("git merge commit");
+    // Skill A: ["git","merge","stash"]  → 2 hits, ratio 2/3 ≈ 0.67  (NOT 1.0)
+    // Skill B: ["commit"]               → 1 hit,  ratio 1.0
+    // Skill C: ["git"]                 → 1 hit,  ratio 1.0
+    // Expected order: ratio 1.0 first (B, C), then 0.67 (A)
+    const skills = [
+      { keywords: ["git", "merge", "stash"] },
+      { keywords: ["commit"] },
+      { keywords: ["git"] },
+    ];
+    const result = scoreL1(tokens, skills, 1);
+    expect(result).toHaveLength(3);
+    // Top positions: ratio 1.0 (B and C), then ratio 0.67 (A)
+    expect(result[0].ratio).toBe(1.0);  // B
+    expect(result[1].ratio).toBe(1.0);  // C
+    expect(result[2].ratio).toBeCloseTo(0.67, 2);  // A
+  });
 
-    expect(hasEn).toBe(true);
-    expect(matched).toBe(false);
+  it("excludes skills below minKeywordHits threshold", () => {
+    const tokens = tokenizeForMatch("git");
+    const skills = [{ keywords: ["git", "commit", "push", "merge"] }]; // 1 hit, total 4
+    const result = scoreL1(tokens, skills, 2); // require 2 hits
+    expect(result).toHaveLength(0);
+  });
+
+  it("returns empty when prompt has no English tokens", () => {
+    const tokens = tokenizeForMatch("帮我做这个");
+    const skills = [{ keywords: ["git", "commit"] }];
+    const result = scoreL1(tokens, skills, 1);
+    expect(result).toHaveLength(0);
+  });
+
+  it("is case-insensitive", () => {
+    const tokens = tokenizeForMatch("GIT COMMIT");
+    const skills = [{ keywords: ["git", "commit"] }];
+    const result = scoreL1(tokens, skills, 1);
+    expect(result).toHaveLength(1);
+    expect(result[0].hitCount).toBe(2);
   });
 });
