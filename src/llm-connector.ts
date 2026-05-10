@@ -1,5 +1,5 @@
 /**
- * llm-connector bundled into skill-auto-injection
+ * llm-connector bundled into Skill AI Inject
  * Inline version of ~/projects/llm-connector/src/ts/connector.ts
  * Default env from shared-lib/ts/config.ts
  */

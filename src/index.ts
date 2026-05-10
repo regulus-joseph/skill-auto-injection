@@ -1,5 +1,5 @@
 /**
- * skill-auto-injection/src/index.ts
+ * skill-ai-inject/src/index.ts
  * ==================================
  * L1: keyword extraction from prompt → match against skill.keywords (cheap, zero-cost)
  * L2: embedding similarity (only if L1 yields no results)
@@ -19,7 +19,7 @@ import {
 } from "./utils.js";
 
 /**
- * Root configuration shape for the skill-auto-injection plugin.
+ * Root configuration shape for the skill-ai-inject plugin.
  * Loaded from openclaw.json plugin config entry.
  */
 interface SkillAutoInjectionConfig {
@@ -175,7 +175,7 @@ async function loadSkillWithMeta(
   } catch { /* no meta yet */ }
 
   if (stale) {
-    api.logger.info?.(`[skill-auto-injection] computing embedding for ${name}...`);
+    api.logger.info?.(`[skill-ai-inject] computing embedding for ${name}...`);
     const [embedding, keywords] = await Promise.all([
       getEmbedding(description, cfg),
       extractKeywords(description, name, cfg),
@@ -189,12 +189,12 @@ async function loadSkillWithMeta(
     };
     try {
       await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
-      api.logger.info?.(`[skill-auto-injection] cached embedding for ${name}`);
+      api.logger.info?.(`[skill-ai-inject] cached embedding for ${name}`);
     } catch (err) {
-      api.logger.warn?.(`[skill-auto-injection] failed to write meta for ${name}: ${String(err)}`);
+      api.logger.warn?.(`[skill-ai-inject] failed to write meta for ${name}: ${String(err)}`);
     }
   } else {
-    api.logger.info?.(`[skill-auto-injection] using cached embedding for ${name}`);
+    api.logger.info?.(`[skill-ai-inject] using cached embedding for ${name}`);
   }
 
   return { info: { name, description, path: skillDir }, embedding: meta.embedding, keywords: meta.keywords };
@@ -261,13 +261,13 @@ async function getOrCacheSkills(
 
   cachedSkills = Array.from(seen.values());
   lastCacheTime = now;
-  api.logger.info?.(`[skill-auto-injection] loaded ${cachedSkills.length} skills`);
+  api.logger.info?.(`[skill-ai-inject] loaded ${cachedSkills.length} skills`);
 
   return cachedSkills;
 }
 
 /**
- * Skill Auto-Injection plugin.
+ * Skill AI Inject plugin.
  *
  * Two-tier cascade:
  *  - L1 (keyword): Extract English tokens from the user prompt, check against each
@@ -280,8 +280,8 @@ async function getOrCacheSkills(
  * via the `prependContext` return value of the `before_prompt_build` hook.
  */
 const skillAutoInjectionPlugin = {
-  id: "skill-auto-injection",
-  name: "Skill Auto-Injection",
+  id: "skill-ai-inject",
+  name: "Skill AI Inject",
   description: "Auto-match user delivery task with available skills using keyword + embedding cascade",
   kind: "utility" as const,
 
@@ -292,7 +292,7 @@ const skillAutoInjectionPlugin = {
     const config = parsePluginConfig(api.pluginConfig);
 
     if (config.enabled === false) {
-      api.logger.info?.("[skill-auto-injection] disabled by config");
+      api.logger.info?.("[skill-ai-inject] disabled by config");
       return;
     }
 
@@ -308,7 +308,7 @@ const skillAutoInjectionPlugin = {
       llmModel:   config.translate?.model,
     };
 
-    api.logger.info?.("[skill-auto-injection] register called");
+    api.logger.info?.("[skill-ai-inject] register called");
 
     /**
      * before_prompt_build hook — entry point for skill matching.
@@ -370,7 +370,7 @@ const skillAutoInjectionPlugin = {
               .join("\n");
 
             return {
-              prependContext: `[Skill Auto-Injection] The current conversation may involve these available skills:\n${skillsText}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`,
+              prependContext: `[Skill AI Inject] The current conversation may involve these available skills:\n${skillsText}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`,
             };
           }
         }
@@ -419,11 +419,11 @@ const skillAutoInjectionPlugin = {
         const translationNote = wasTranslated ? "\n(Note: User request was translated to English for matching.)" : "";
 
         return {
-          prependContext: `[Skill Auto-Injection] The current conversation may involve these available skills:\n${skillsText}${translationNote}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`,
+          prependContext: `[Skill AI Inject] The current conversation may involve these available skills:\n${skillsText}${translationNote}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`,
         };
 
       } catch (err) {
-        api.logger.warn?.(`[skill-auto-injection] matching failed: ${String(err)}`);
+        api.logger.warn?.(`[skill-ai-inject] matching failed: ${String(err)}`);
         return { prependContext: "" };
       }
     });
