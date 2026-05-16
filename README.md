@@ -2,59 +2,60 @@
 
 > Automatically match user delivery tasks with available skills using embedding similarity
 
-## Changelog
+## Version
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 0.4.0 | 2026-05-10 | Reverse L1 matching direction (prompt→skill keywords); switch to `before_prompt_build` hook; hit-ratio scoring; l2CandidateCount config |
-| 0.1.0 | 2026-04-22 | Initial version: embedding-based skill matching |
-| 0.2.0 | 2026-04-22 | Add multi-provider translation (ollama/minimax/openai), optimize logging |
-| 0.3.0 | 2026-04-25 | L1 keyword match (zero-cost) + L2 embed cascade; LLM keyword extraction on skill load; skip translation for English queries |
+**v0.4.0** · OpenClaw 2026.5.x compatible
 
-## Features
+---
 
-- **Two-Tier Matching**: L1 keyword match (instant, zero LLM cost) + L2 embedding fallback (semantic, cross-language)
-- **LLM Keyword Extraction**: On skill load, extract 3-5 trigger keywords via LLM — no manual whitelist maintenance
-- **Smart Translation**: Skip translation when query already contains English characters
-- **Skill Matching**: Match user input against skill descriptions using embedding models
-- **Ollama-Only Translation**: Uses local Ollama for translation and keyword extraction — no external API keys required
-- **Context Injection**: Auto-inject matched skills via `before_prompt_build` hook
-- **Caching**: Cache skill embeddings and keywords for 5 minutes to avoid repeated computation
+## Overview
 
-## Project Structure
+skill-auto-injection automatically matches user input against available skills (from local SKILL.md files) and injects the top matches into the agent's prompt context. It uses a two-tier cascade: L1 keyword match (zero cost, instant) → L2 embedding fallback (semantic, cross-language).
 
+**Key features**:
+- L1 keyword match with LLM-extracted trigger keywords (no manual whitelist maintenance)
+- L2 embedding fallback for semantic matching across languages
+- Smart translation: skips translation when query already contains English characters
+- Ollama-only: no external API keys required
+
+---
+
+## Prerequisites
+
+### Ollama models
+
+```bash
+ollama pull bge-m3          # for embedding similarity
+ollama pull qwen2.5:7b      # for translation and keyword extraction
 ```
-skill-ai-inject/
-├── openclaw.plugin.json    # Plugin configuration
-├── package.json          # Node.js package config
-├── vitest.config.ts     # Test configuration
-├── src/
-│   ├── index.ts          # Plugin entry point
-│   └── utils.ts          # Pure utility functions
-├── tests/
-│   └── utils.test.ts     # Unit tests (29 passing)
-└── README.md
-```
+
+---
 
 ## Installation
 
+### 1. Build plugin
+
 ```bash
-cd ~/projects/skill-ai-inject
+cd ~/projects/skill-auto-injection
 npm install
 npm run build
-openclaw plugins install --link .
-openclaw gateway restart
 ```
 
-## Configuration
+### 2. Link plugin to OpenClaw
 
-### Plugin Config (openclaw.json)
+```bash
+openclaw plugins install --link .
+```
+
+### 3. Configure openclaw.json
 
 ```json
 {
   "plugins": {
+    "allow": ["memory-recall", "skill-auto-injection", "policy-layer", "minimax", "browser"],
+    "bundledDiscovery": "allowlist",
     "entries": {
-      "skill-ai-inject": {
+      "skill-auto-injection": {
         "enabled": true,
         "config": {
           "embedding": {
@@ -74,8 +75,7 @@ openclaw gateway restart
           },
           "keyword": {
             "enabled": true,
-            "model": "qwen2.5:7b",
-            "baseURL": null
+            "model": "qwen2.5:7b"
           }
         }
       }
@@ -83,6 +83,23 @@ openclaw gateway restart
   }
 }
 ```
+
+### 4. Restart gateway
+
+```bash
+openclaw gateway restart
+```
+
+### 5. Verify
+
+```bash
+openclaw plugins inspect skill-auto-injection
+# Should show: Status: loaded
+```
+
+---
+
+## Configuration
 
 ### Config Parameters
 
@@ -102,7 +119,52 @@ openclaw gateway restart
 | `keyword.model` | LLM model for keyword extraction | `qwen2.5:7b` |
 | `keyword.baseURL` | Override baseURL for keyword LLM | `null` (uses embedding.baseURL) |
 
-**Note**: All LLM operations (translation, keyword extraction, embeddings) use Ollama locally — no external API keys required.
+**Note**: All LLM operations use Ollama locally — no external API keys required.
+
+---
+
+## OpenClaw Configuration Notes
+
+### Plugin ID Mismatch
+
+**Problem**: `plugin id mismatch (config uses "skill-ai-inject", export uses "skill-auto-injection")`
+
+**Solution**: The plugin ID must match exactly between `openclaw.plugin.json` and the exported JavaScript object. Always use `skill-auto-injection` as the canonical ID (matching the GitHub repo name). Update `openclaw.json` entries accordingly:
+
+```json
+"entries": {
+  "skill-auto-injection": { ... }
+}
+```
+
+### bundledDiscovery: "allowlist"
+
+When `bundledDiscovery` is set to `"allowlist"` (default), the `plugins.allow` list filters ALL plugins. Make sure `skill-auto-injection` is listed:
+
+```json
+"plugins": {
+  "allow": ["skill-auto-injection", ...]
+}
+```
+
+### policy-layer AllowPromptInjection
+
+If policy-layer blocks prompt injection, skill matching results won't appear in context:
+
+```json
+"entries": {
+  "policy-layer": {
+    "enabled": true,
+    "config": {
+      "hooks": {
+        "allowPromptInjection": true
+      }
+    }
+  }
+}
+```
+
+---
 
 ## Workflow
 
@@ -123,13 +185,17 @@ User Message → before_prompt_build hook
 
 **Keywords are extracted by LLM when skills are loaded** (cached for 5 min) — no manual maintenance required.
 
+---
+
 ## Skills Source
 
 Plugin scans SKILL.md from:
-1. `~/.openclaw/skills/` - Global skills
-2. `~/.openclaw/workspace/.openclaw/skills/` - Workspace skills
+1. `~/.openclaw/skills/` — Global skills
+2. `~/.openclaw/workspace/.openclaw/skills/` — Workspace skills
 
 **Note**: Currently only scans local directories. OpenClaw bundled skills (acp-router, coding-agent, etc.) are not included.
+
+---
 
 ## Injection Format
 
@@ -142,36 +208,39 @@ When skills are matched, prepends:
 Please consider using relevant skills to fulfill the user's request if applicable.
 ```
 
-## Testing
-
-```bash
-npm test          # Run all tests
-npm run test:watch  # Watch mode
-```
-
-**29 unit tests** covering tokenization, cosine similarity, simpleHash, and L1 keyword scoring.
+---
 
 ## Debugging
 
 ```bash
 # View plugin logs
-openclaw logs 2>&1 | grep skill-ai-inject
+openclaw logs 2>&1 | grep skill-auto-injection
 
-# List skills
+# Check plugin status
+openclaw plugins inspect skill-auto-injection
+
+# List available skills
 openclaw skills list
 
 # Restart gateway
 openclaw gateway restart
 ```
 
-## Future Improvements
+---
 
-1. **Bundled Skills Support**: Scan OpenClaw builtin skills directory
-2. **Exclusion List**: Exclude specific skills from auto-matching
-3. **User Feedback Loop**: Learn from user corrections (skill was/wasn't helpful)
-4. **Skill Auto-Install**: Auto-install from ClawHub when high-confidence match but skill not installed
+## Known Issues
 
-## References
+- Only scans local skill directories; bundled OpenClaw skills are not included
+- No exclusion list for specific skills
+- No user feedback loop for learning from corrections
 
-- [OpenClaw Plugin SDK](https://github.com/openclaw/openclaw)
-- [bge-m3 embedding](https://ollama.com/)
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 0.1.0 | 2026-04-22 | Initial: embedding-based skill matching |
+| 0.2.0 | 2026-04-22 | Add multi-provider translation (ollama/minimax/openai), optimize logging |
+| 0.3.0 | 2026-04-25 | L1 keyword match (zero-cost) + L2 embed cascade; LLM keyword extraction on skill load; skip translation for English queries |
+| **0.4.0** | 2026-05-10 | **Reverse L1 matching direction; switch to `before_prompt_build` hook; hit-ratio scoring; l2CandidateCount config** |

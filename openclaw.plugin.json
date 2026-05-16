@@ -1,6 +1,6 @@
 {
-  "id": "skill-ai-inject",
-  "name": "Skill AI Inject",
+  "id": "skill-auto-injection",
+  "name": "Skill Auto-Injection",
   "description": "Auto-match user delivery task with available skills using embedding similarity",
   "version": "0.4.0",
   "kind": "utility",
@@ -71,7 +71,7 @@
   },
   "uiHints": {
     "enabled": {
-      "label": "Enable Skill AI Inject",
+      "label": "Enable Skill Auto-Injection",
       "help": "Automatically match user input with available skills"
     },
     "matching.skillMatchThreshold": {
