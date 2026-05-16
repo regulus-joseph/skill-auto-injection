@@ -1,12 +1,12 @@
 {
-  "name": "skill-ai-inject",
+  "name": "skill-auto-injection",
   "version": "0.4.0",
   "type": "module",
   "description": "Auto-match user delivery task with available skills for better agent responses",
-  "main": "dist/index.js",
+  "main": "src/index.ts",
   "openclaw": {
     "extensions": [
-      "./dist/index.js"
+      "./src/index.ts"
     ],
     "compat": {
       "pluginApi": ">=2026.3.24-beta.2",
