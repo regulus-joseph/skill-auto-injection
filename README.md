@@ -1,16 +1,16 @@
-# Skill Auto-Injection Plugin
+# Skill AI Inject
 
 > Automatically match user delivery tasks with available skills using embedding similarity
 
 ## Version
 
-**v0.4.0** · OpenClaw 2026.5.x compatible
+**v0.4.1** · OpenClaw 2026.5.x compatible
 
 ---
 
 ## Overview
 
-skill-auto-injection automatically matches user input against available skills (from local SKILL.md files) and injects the top matches into the agent's prompt context. It uses a two-tier cascade: L1 keyword match (zero cost, instant) → L2 embedding fallback (semantic, cross-language).
+skill-ai-inject automatically matches user input against available skills (from local SKILL.md files) and injects the top matches into the agent's prompt context. It uses a two-tier cascade: L1 keyword match (zero cost, instant) → L2 embedding fallback (semantic, cross-language).
 
 **Key features**:
 - L1 keyword match with LLM-extracted trigger keywords (no manual whitelist maintenance)
@@ -36,7 +36,7 @@ ollama pull qwen2.5:7b      # for translation and keyword extraction
 ### 1. Build plugin
 
 ```bash
-cd ~/projects/skill-auto-injection
+cd ~/projects/skill-ai-inject
 npm install
 npm run build
 ```
@@ -52,10 +52,10 @@ openclaw plugins install --link .
 ```json
 {
   "plugins": {
-    "allow": ["memory-recall", "skill-auto-injection", "policy-layer", "minimax", "browser"],
+    "allow": ["memory-recall", "skill-ai-inject", "policy-layer", "minimax", "browser"],
     "bundledDiscovery": "allowlist",
     "entries": {
-      "skill-auto-injection": {
+      "skill-ai-inject": {
         "enabled": true,
         "config": {
           "embedding": {
@@ -93,7 +93,7 @@ openclaw gateway restart
 ### 5. Verify
 
 ```bash
-openclaw plugins inspect skill-auto-injection
+openclaw plugins inspect skill-ai-inject
 # Should show: Status: loaded
 ```
 
@@ -125,25 +125,23 @@ openclaw plugins inspect skill-auto-injection
 
 ## OpenClaw Configuration Notes
 
-### Plugin ID Mismatch
+### bundledDiscovery: "allowlist"
 
-**Problem**: `plugin id mismatch (config uses "skill-ai-inject", export uses "skill-auto-injection")`
-
-**Solution**: The plugin ID must match exactly between `openclaw.plugin.json` and the exported JavaScript object. Always use `skill-auto-injection` as the canonical ID (matching the GitHub repo name). Update `openclaw.json` entries accordingly:
+When `bundledDiscovery` is set to `"allowlist"` (default), the `plugins.allow` list filters ALL plugins. Make sure `skill-ai-inject` is listed:
 
 ```json
-"entries": {
-  "skill-auto-injection": { ... }
+"plugins": {
+  "allow": ["skill-ai-inject", ...]
 }
 ```
 
 ### bundledDiscovery: "allowlist"
 
-When `bundledDiscovery` is set to `"allowlist"` (default), the `plugins.allow` list filters ALL plugins. Make sure `skill-auto-injection` is listed:
+When `bundledDiscovery` is set to `"allowlist"` (default), the `plugins.allow` list filters ALL plugins. Make sure `skill-ai-inject` is listed:
 
 ```json
 "plugins": {
-  "allow": ["skill-auto-injection", ...]
+  "allow": ["skill-ai-inject", ...]
 }
 ```
 
@@ -214,10 +212,10 @@ Please consider using relevant skills to fulfill the user's request if applicabl
 
 ```bash
 # View plugin logs
-openclaw logs 2>&1 | grep skill-auto-injection
+openclaw logs 2>&1 | grep skill-ai-inject
 
 # Check plugin status
-openclaw plugins inspect skill-auto-injection
+openclaw plugins inspect skill-ai-inject
 
 # List available skills
 openclaw skills list
@@ -243,4 +241,5 @@ openclaw gateway restart
 | 0.1.0 | 2026-04-22 | Initial: embedding-based skill matching |
 | 0.2.0 | 2026-04-22 | Add multi-provider translation (ollama/minimax/openai), optimize logging |
 | 0.3.0 | 2026-04-25 | L1 keyword match (zero-cost) + L2 embed cascade; LLM keyword extraction on skill load; skip translation for English queries |
+| **0.4.1** | 2026-05-16 | **Rename project to skill-ai-inject; rewrite README with complete documentation** |
 | **0.4.0** | 2026-05-10 | **Reverse L1 matching direction; switch to `before_prompt_build` hook; hit-ratio scoring; l2CandidateCount config** |
