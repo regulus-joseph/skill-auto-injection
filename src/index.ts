@@ -322,12 +322,11 @@ const skillAutoInjectionPlugin = {
      *     inject top-N skills above threshold.
      *
      * Returns `{ prependContext: string }` to inject matched skills into the prompt.
-     * Returns `{ prependContext: "" }` when no skills match or on error (no-op).
-     */
+      * Returns `{ prependContext: "" }` when no skills match or on error (no-op).
+      */
     api.registerHook("before_prompt_build", async (event: { prompt?: string }, _ctx) => {
       const prompt = event?.prompt ?? "";
       if (!prompt || prompt.length < 5) return { prependContext: "" };
-
       try {
         const skills = await getOrCacheSkills(api, llmCfg);
         if (skills.length === 0) return { prependContext: "" };
@@ -350,7 +349,6 @@ const skillAutoInjectionPlugin = {
           }
 
           if (scored.length > 0) {
-            // Sort by hit ratio desc, then by hit count desc
             scored.sort((a, b) => {
               const ratioA = a.hitCount / a.total;
               const ratioB = b.hitCount / b.total;
@@ -370,7 +368,7 @@ const skillAutoInjectionPlugin = {
               .join("\n");
 
             return {
-              prependContext: `[Skill Auto-Injection] The current conversation may involve these available skills:\n${skillsText}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`,
+              prependContext: `[Skill AI Inject] The current conversation may involve these available skills:\n${skillsText}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`,
             };
           }
         }
@@ -393,7 +391,6 @@ const skillAutoInjectionPlugin = {
         const promptEmbedding = await getEmbedding(matchText, llmCfg);
         if (promptEmbedding.length === 0) return { prependContext: "" };
 
-        // Score all skills by cosine similarity, take top candidates
         const scored: Array<{ skill: CachedSkill; score: number }> = [];
         for (const skill of skills) {
           const score = cosineSimilarity(promptEmbedding, skill.embedding);
@@ -419,14 +416,14 @@ const skillAutoInjectionPlugin = {
         const translationNote = wasTranslated ? "\n(Note: User request was translated to English for matching.)" : "";
 
         return {
-          prependContext: `[Skill Auto-Injection] The current conversation may involve these available skills:\n${skillsText}${translationNote}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`,
+          prependContext: `[Skill AI Inject] The current conversation may involve these available skills:\n${skillsText}${translationNote}\n\nPlease consider using relevant skills to fulfill the user's request if applicable.`,
         };
 
       } catch (err) {
-        api.logger.warn?.(`[skill-auto-injection] matching failed: ${String(err)}`);
+        api.logger.warn?.(`[skill-ai-inject] matching failed: ${String(err)}`);
         return { prependContext: "" };
       }
-    });
+    }, { name: "skill-ai-inject" });
   },
 };
 
