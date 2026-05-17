@@ -280,7 +280,7 @@ async function getOrCacheSkills(
  * via the `prependContext` return value of the `before_prompt_build` hook.
  */
 const skillAutoInjectionPlugin = {
-  id: "skill-auto-injection",
+  id: "skill-ai-inject",
   name: "Skill Auto-Injection",
   description: "Auto-match user delivery task with available skills using keyword + embedding cascade",
   kind: "utility" as const,
