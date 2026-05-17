@@ -32,6 +32,15 @@
   },
   "changelog": [
     {
+      "version": "0.4.2",
+      "date": "2026-05-17",
+      "changes": [
+        "fix: hook registration — switch from api.on to api.registerHook with { name: 'skill-ai-inject' }",
+        "fix: hook event field — use event.prompt instead of event.userMessage",
+        "fix: exported plugin id to skill-ai-inject to match package name"
+      ]
+    },
+    {
       "version": "0.4.1",
       "date": "2026-05-16",
       "changes": [

@@ -4,7 +4,7 @@
 
 ## Version
 
-**v0.4.1** · OpenClaw 2026.5.x compatible
+**v0.4.2** · OpenClaw 2026.5.x compatible
 
 ---
 
@@ -241,5 +241,6 @@ openclaw gateway restart
 | 0.1.0 | 2026-04-22 | Initial: embedding-based skill matching |
 | 0.2.0 | 2026-04-22 | Add multi-provider translation (ollama/minimax/openai), optimize logging |
 | 0.3.0 | 2026-04-25 | L1 keyword match (zero-cost) + L2 embed cascade; LLM keyword extraction on skill load; skip translation for English queries |
+| **0.4.2** | 2026-05-17 | **Fix hook registration: use api.registerHook with name; use event.prompt** |
 | **0.4.1** | 2026-05-16 | **Rename project to skill-ai-inject; rewrite README with complete documentation** |
 | **0.4.0** | 2026-05-10 | **Reverse L1 matching direction; switch to `before_prompt_build` hook; hit-ratio scoring; l2CandidateCount config** |
