@@ -324,7 +324,9 @@ const skillAutoInjectionPlugin = {
      * Returns `{ prependContext: string }` to inject matched skills into the prompt.
       * Returns `{ prependContext: "" }` when no skills match or on error (no-op).
       */
-    api.registerHook("before_prompt_build", async (event: { prompt?: string }, _ctx) => {
+    api.on("before_prompt_build", async (event: { prompt?: string }, _ctx) => {
+      console.log("[skill-ai-inject] *** before_prompt_build CALLED ***");
+      console.log("[skill-ai-inject] prompt length:", (event?.prompt ?? "").length);
       const prompt = event?.prompt ?? "";
       if (!prompt || prompt.length < 5) return { prependContext: "" };
       try {

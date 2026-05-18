@@ -57,6 +57,10 @@ openclaw plugins install --link .
     "entries": {
       "skill-ai-inject": {
         "enabled": true,
+        "hooks": {
+          "allowPromptInjection": true,
+          "allowConversationAccess": true
+        },
         "config": {
           "embedding": {
             "baseURL": "http://localhost:11434",
@@ -228,6 +232,27 @@ openclaw gateway restart
 
 ## Known Issues
 
+### Hook Won't Trigger Without hooks Config
+
+**Problem**: `before_prompt_build` hook doesn't fire even when plugin loads successfully.
+
+**Solution**: You **must** add `hooks` config under the plugin entry:
+
+```json
+"entries": {
+  "skill-ai-inject": {
+    "enabled": true,
+    "hooks": {
+      "allowPromptInjection": true,
+      "allowConversationAccess": true
+    },
+    ...
+  }
+}
+```
+
+Without this, the hook silently fails to trigger — plugin appears loaded but skill matching never runs.
+
 - Only scans local skill directories; bundled OpenClaw skills are not included
 - No exclusion list for specific skills
 - No user feedback loop for learning from corrections
@@ -236,11 +261,11 @@ openclaw gateway restart
 
 ## Version History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 0.1.0 | 2026-04-22 | Initial: embedding-based skill matching |
-| 0.2.0 | 2026-04-22 | Add multi-provider translation (ollama/minimax/openai), optimize logging |
-| 0.3.0 | 2026-04-25 | L1 keyword match (zero-cost) + L2 embed cascade; LLM keyword extraction on skill load; skip translation for English queries |
-| **0.4.2** | 2026-05-17 | **Fix hook registration: use api.registerHook with name; use event.prompt** |
-| **0.4.1** | 2026-05-16 | **Rename project to skill-ai-inject; rewrite README with complete documentation** |
-| **0.4.0** | 2026-05-10 | **Reverse L1 matching direction; switch to `before_prompt_build` hook; hit-ratio scoring; l2CandidateCount config** |
+|  Version  |    Date    |                                                           Changes                                                           |
+| --------- | ---------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 0.1.0     | 2026-04-22 | Initial: embedding-based skill matching                                                                                     |
+| 0.2.0     | 2026-04-22 | Add multi-provider translation (ollama/minimax/openai), optimize logging                                                    |
+| 0.3.0     | 2026-04-25 | L1 keyword match (zero-cost) + L2 embed cascade; LLM keyword extraction on skill load; skip translation for English queries |
+| **0.4.0** | 2026-05-10 | **Reverse L1 matching direction; switch to `before_prompt_build` hook; hit-ratio scoring; l2CandidateCount config**         |
+| **0.4.1** | 2026-05-16 | **Rename project to skill-ai-inject; rewrite README with complete documentation**                                           |
+| **0.4.2** | 2026-05-17 | **Fix hook registration: use api.registerHook with name; use event.prompt**                                                 |
