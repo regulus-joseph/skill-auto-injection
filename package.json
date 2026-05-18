@@ -26,7 +26,7 @@
     "vitest": "^4.1.5"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.js --platform=node",
+    "build": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.js --platform=node --resolve-extensions=.ts,.tsx,.js,.jsx,.mts,.cts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
