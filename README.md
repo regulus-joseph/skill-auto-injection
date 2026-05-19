@@ -26,8 +26,11 @@ skill-ai-inject automatically matches user input against available skills (from 
 
 ```bash
 ollama pull bge-m3          # for embedding similarity
-ollama pull qwen2.5:7b      # for translation and keyword extraction
+ollama pull qwen3.5:4b      # for keyword extraction (with think mode)
+ollama pull qwen2.5:3b      # for translation (no think, faster)
 ```
+
+> **Translation model tip**: `qwen2.5:7b` is faster than `qwen3.5` for translation since it has no think/reasoning overhead. Even smaller models (e.g. `qwen2.5:3b`) work well for translation-only tasks.
 
 ---
 
@@ -68,8 +71,8 @@ openclaw plugins install --link .
             "dimensions": 1024
           },
           "translate": {
-            "enabled": true,
-            "model": "qwen2.5:7b"
+            "enabled": false,
+            "model": "qwen2.5:3b"
           },
           "matching": {
             "skillMatchThreshold": 0.6,
@@ -79,7 +82,7 @@ openclaw plugins install --link .
           },
           "keyword": {
             "enabled": true,
-            "model": "qwen2.5:7b"
+            "model": "qwen3.5:4b"
           }
         }
       }
@@ -113,14 +116,14 @@ openclaw plugins inspect skill-ai-inject
 | `embedding.baseURL` | Embedding API URL | `http://localhost:11434` |
 | `embedding.model` | Embedding model | `bge-m3` |
 | `embedding.dimensions` | Vector dimensions | `1024` |
-| `translate.enabled` | Enable translation | `true` |
-| `translate.model` | Translation model | `qwen2.5:7b` |
+| `translate.enabled` | Enable translation | `false` |
+| `translate.model` | Translation model | `qwen2.5:3b` |
 | `matching.skillMatchThreshold` | Skill match threshold (0-1) | `0.6` |
 | `matching.maxSkills` | Max skills to inject | `3` |
 | `matching.minKeywordMatch` | Min keyword hits for L1 match | `1` |
 | `matching.l2CandidateCount` | Max candidates for L2 embedding stage | `20` |
 | `keyword.enabled` | Enable L1 keyword matching | `true` |
-| `keyword.model` | LLM model for keyword extraction | `qwen2.5:7b` |
+| `keyword.model` | LLM model for keyword extraction | `qwen3.5:4b` |
 | `keyword.baseURL` | Override baseURL for keyword LLM | `null` (uses embedding.baseURL) |
 
 **Note**: All LLM operations use Ollama locally — no external API keys required.
@@ -128,16 +131,6 @@ openclaw plugins inspect skill-ai-inject
 ---
 
 ## OpenClaw Configuration Notes
-
-### bundledDiscovery: "allowlist"
-
-When `bundledDiscovery` is set to `"allowlist"` (default), the `plugins.allow` list filters ALL plugins. Make sure `skill-ai-inject` is listed:
-
-```json
-"plugins": {
-  "allow": ["skill-ai-inject", ...]
-}
-```
 
 ### bundledDiscovery: "allowlist"
 

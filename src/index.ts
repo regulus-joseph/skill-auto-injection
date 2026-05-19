@@ -300,7 +300,7 @@ const skillAutoInjectionPlugin = {
     const maxSkills = config.matching?.maxSkills ?? 3;
     const minKeywordHits = config.matching?.minKeywordMatch ?? 1;
     const l2CandidateCount = config.matching?.l2CandidateCount ?? 20;
-    const translateEnabled = config.translate?.enabled ?? true;
+    const translateEnabled = config.translate?.enabled ?? false;
 
     const llmCfg: LLMConfig = {
       baseUrl:    config.embedding?.baseURL,

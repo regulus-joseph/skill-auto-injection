@@ -1,6 +1,6 @@
 {
   "name": "skill-ai-inject",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "type": "module",
   "description": "Auto-match user delivery task with available skills for better agent responses",
   "main": "src/index.ts",
@@ -31,6 +31,22 @@
     "test:watch": "vitest"
   },
   "changelog": [
+    {
+      "version": "0.4.3",
+      "date": "2026-05-19",
+      "changes": [
+        "fix: translate.enabled default changed to false — translation hurts L2 matching scores for Chinese skill descriptions",
+        "refactor: translate.model changed to qwen2.5:3b (smaller, faster, no think overhead)",
+        "refactor: keyword.model changed to qwen3.5:4b (consistent with other projects using qwen3.5 series)",
+        "docs: README/配置示例/参数表同步更新",
+        "docs: fix duplicate bundledDiscovery section in README.md",
+        "docs: add config/OPENCLAW_CONFIG.md with critical OpenClaw configuration notes",
+        "docs: README_zh synced to match English version completeness",
+        "test: add unit tests for llm-connector (translateToEnglish, extractKeywords)",
+        "test: add integration tests for getEmbedding/translateToEnglish/extractKeywords with real Ollama",
+        "test: add translation-effectiveness-test.ts to measure translation impact on L2 matching"
+      ]
+    },
     {
       "version": "0.4.2",
       "date": "2026-05-17",
