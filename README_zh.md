@@ -4,7 +4,7 @@
 
 ## 版本
 
-**v0.4.2** · OpenClaw 2026.5.x 兼容
+**v0.4.5** · OpenClaw 2026.5.x 兼容
 
 ---
 
@@ -17,6 +17,8 @@ skill-ai-inject 会自动将用户输入与可用技能（来自本地 SKILL.md 
 - L2 embedding 回退，支持跨语言语义匹配
 - 智能翻译：当查询已包含英文字符时跳过翻译
 - 纯 Ollama：无需外部 API key
+- 任务意图预过滤：只有包含任务请求模式的 prompt 才会进入匹配流程
+- Session 抑制：匹配成功后短期内不重复匹配
 
 ---
 
@@ -30,7 +32,7 @@ ollama pull qwen3.5:4b      # 用于关键字提取（带 think 模式）
 ollama pull qwen2.5:3b      # 用于翻译（无 think，开销低，速度快）
 ```
 
-> **翻译模型提示**：`qwen2.5:7b` 比 `qwen3.5` 系列更快，因为没有 think/推理开销。甚至更小的模型（如 `qwen2.5:3b`）也能很好地完成翻译任务。
+> **翻译模型提示**：`qwen2.5:3b` 比 `qwen3.5` 系列更快，因为没有 think/推理开销。甚至更小的模型也能很好地完成翻译任务。
 
 ---
 
@@ -75,7 +77,7 @@ openclaw plugins install --link .
             "model": "qwen2.5:3b"
           },
           "matching": {
-            "skillMatchThreshold": 0.6,
+            "skillMatchThreshold": 0.5,
             "maxSkills": 3,
             "minKeywordMatch": 1,
             "l2CandidateCount": 20
@@ -83,6 +85,11 @@ openclaw plugins install --link .
           "keyword": {
             "enabled": true,
             "model": "qwen3.5:4b"
+          },
+          "taskIntent": {
+            "requireAll": false,
+            "caseSensitive": false,
+            "minLength": 5
           }
         }
       }
@@ -118,13 +125,17 @@ openclaw plugins inspect skill-ai-inject
 | `embedding.dimensions` | 向量维度 | `1024` |
 | `translate.enabled` | 启用翻译 | `false` |
 | `translate.model` | 翻译模型 | `qwen2.5:3b` |
-| `matching.skillMatchThreshold` | 技能匹配阈值 (0-1) | `0.6` |
+| `matching.skillMatchThreshold` | 技能匹配阈值 (0-1) | `0.5` |
 | `matching.maxSkills` | 最大注入技能数 | `3` |
 | `matching.minKeywordMatch` | L1 命中最少关键字数 | `1` |
 | `matching.l2CandidateCount` | L2 embedding 阶段最大候选数 | `20` |
 | `keyword.enabled` | 启用 L1 关键字匹配 | `true` |
 | `keyword.model` | LLM 关键字提取模型 | `qwen3.5:4b` |
 | `keyword.baseURL` | 覆盖关键字 LLM 的 baseURL | `null`（复用 embedding.baseURL）|
+| `taskIntent.patterns` | 自定义任务意图模式（数组） | `null`（使用硬编码 + patterns 文件）|
+| `taskIntent.requireAll` | 是否需匹配所有模式 | `false` |
+| `taskIntent.caseSensitive` | 模式匹配是否区分大小写 | `false` |
+| `taskIntent.minLength` | 检查模式的最小 prompt 长度 | `5` |
 
 **注意**：所有 LLM 操作均使用 Ollama 本地运行，无需外部 API key。
 
@@ -165,6 +176,11 @@ openclaw plugins inspect skill-ai-inject
 
 ```
 用户消息 → before_prompt_build 钩子
+  │
+  ├── Session 抑制：5 分钟内相同 prompt 不重匹配
+  │
+  ├── 任务意图门控：prompt 必须匹配任务请求模式
+  │     未匹配 → 直接跳过
   │
   ├── L1: 关键字匹配（零成本）
   │     从 prompt 中提取英文 token
@@ -261,4 +277,7 @@ openclaw gateway restart
 | 0.3.0 | 2026-04-25 | L1 关键字匹配（零开销）+ L2 embed 级联；LLM 关键字提取；英文 query 跳过翻译 |
 | **0.4.0** | 2026-05-10 | **反转 L1 匹配方向；切换至 `before_prompt_build` 钩子；命中比率评分；新增 l2CandidateCount** |
 | **0.4.1** | 2026-05-16 | **项目重命名为 skill-ai-inject；重写 README 完善文档** |
-| **0.4.2** | 2026-05-17 | **修复钩子注册：使用 api.registerHook；使用 event.prompt** |
+| **0.4.2** | 2026-05-17 | **修复钩子注册：使用 api.on；使用 event.prompt** |
+| **0.4.3** | 2026-05-19 | **修复翻译默认 false；翻译改用 qwen2.5:3b；关键字改用 qwen3.5:4b；新增单元/集成测试；新增 OPENCLAW_CONFIG.md** |
+| **0.4.4** | 2026-05-21 | **新增任务意图门控；新增 session 抑制；新增外部 patterns 文件；taskIntent 配置项；~80+ 匹配模式；移除调试日志** |
+| **0.4.5** | 2026-05-21 | **修复 L2 调试日志条件逻辑；keyword 提取模型改为 keyword.model 而非 translate.model** |

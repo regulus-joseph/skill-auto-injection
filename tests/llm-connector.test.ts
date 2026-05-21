@@ -93,7 +93,7 @@ describe("translateToEnglish", () => {
     const [url, opts] = fetchSpy.mock.calls[0];
     expect(url).toContain("/api/generate");
     const body = JSON.parse((opts as any).body);
-    expect(body.model).toBe("qwen3.5:4b"); // default model
+    expect(body.model).toBe("qwen2.5:3b"); // default model
     expect(body.prompt).toContain("测试");
   });
 });
@@ -199,7 +199,7 @@ describe("extractKeywords", () => {
     const [url, opts] = fetchSpy.mock.calls[0];
     expect(url).toContain("/api/generate");
     const body = JSON.parse((opts as any).body);
-    expect(body.model).toBe("qwen3.5:4b"); // default model
+    expect(body.model).toBe("qwen2.5:3b"); // default model
     expect(body.prompt).toContain("skill");
   });
 });

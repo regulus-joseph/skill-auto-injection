@@ -7,7 +7,7 @@
 // Default config (matches shared-lib/ts/config.ts)
 const DEFAULT_ENV = {
   baseUrl:       process.env.OLLAMA_BASE_URL          || "http://localhost:11434",
-  llmModel:     process.env.OLLAMA_LLM_MODEL        || "qwen3.5:4b",
+  llmModel:     process.env.OLLAMA_LLM_MODEL        || "qwen2.5:3b",
   embedModel:   process.env.OLLAMA_EMBED_MODEL      || "bge-m3",
   embedDim:     parseInt(process.env.OLLAMA_EMBED_DIM || "1024", 10),
   timeoutMs:    parseInt(process.env.OLLAMA_TIMEOUT_MS || "30000", 10),
@@ -101,6 +101,23 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (dA * dB);
 }
 
+/** Levenshtein distance normalized to [0,1] (1 = identical). */
+export function wordSimilarity(a: string, b: string): number {
+  if (a === b) return 1;
+  const lenA = a.length, lenB = b.length;
+  if (lenA === 0 || lenB === 0) return 0;
+  const dp: number[][] = Array.from({ length: lenA + 1 }, () => new Array(lenB + 1).fill(0));
+  for (let i = 1; i <= lenA; i++) dp[i][0] = i;
+  for (let j = 1; j <= lenB; j++) dp[0][j] = j;
+  for (let i = 1; i <= lenA; i++) {
+    for (let j = 1; j <= lenB; j++) {
+      if (a[i - 1] === b[j - 1]) dp[i][j] = dp[i - 1][j - 1];
+      else dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return 1 - dp[lenA][lenB] / Math.max(lenA, lenB);
+}
+
 export async function getEmbedding(
   text: string,
   cfg?: LLMConfig,
@@ -154,7 +171,7 @@ export async function extractKeywords(
       url,
       {
         model: c.llmModel,
-        prompt: `You are a keyword extractor. Given a skill description, extract 3-5 short English trigger keywords (single words or simple phrases) that users would likely type to invoke this skill. Return ONLY a JSON array of strings, nothing else.\n\nSkill name: ${skillName}\nDescription: ${description}\n\nRespond with a JSON array, e.g.: ["git", "commit", "version control"]`,
+        prompt: `You are a keyword extractor. Given a skill description, extract up to 30 short English trigger keywords (single words or simple phrases) that users would likely type to invoke this skill. Return ONLY a JSON array of strings, nothing else.\n\nSkill name: ${skillName}\nDescription: ${description}\n\nRespond with a JSON array, e.g.: ["git", "commit", "version control"]`,
         stream: false,
         think: false,
       },

@@ -2,7 +2,7 @@
   "id": "skill-ai-inject",
   "name": "Skill Auto-Injection",
   "description": "Auto-match user delivery task with available skills using embedding similarity",
-  "version": "0.4.3",
+  "version": "0.4.5",
   "kind": "utility",
   "configSchema": {
     "type": "object",
@@ -39,7 +39,7 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1,
-            "default": 0.6
+            "default": 0.5
           },
           "maxSkills": {
             "type": "integer",
@@ -64,7 +64,33 @@
         "properties": {
           "enabled": { "type": "boolean", "default": true },
           "model": { "type": "string",         "default": "qwen3.5:4b" },
-          "baseURL": { "type": "string" }
+          "baseURL": { "type": "string" },
+          "translate": { "type": "boolean", "default": false }
+        }
+      },
+      "taskIntent": {
+        "type": "object",
+        "properties": {
+          "patterns": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "requireAll": {
+            "type": "boolean",
+            "default": false,
+            "description": "Require all patterns to match (default: any pattern matches)"
+          },
+          "caseSensitive": {
+            "type": "boolean",
+            "default": false,
+            "description": "Case sensitive pattern matching"
+          },
+          "minLength": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 5,
+            "description": "Minimum prompt length to check patterns"
+          }
         }
       }
     }

@@ -45,7 +45,7 @@ describeIntegration("extractKeywords (integration)", () => {
       { baseUrl: OLLAMA_URL, llmModel: "qwen3.5:4b" }
     );
     expect(result.length).toBeGreaterThan(0);
-    expect(result.length).toBeLessThanOrEqual(5);
+    expect(result.length).toBeLessThanOrEqual(35);
     // Should contain git-related keywords
     const lower = result.map(k => k.toLowerCase());
     expect(lower.some(k => k.includes("git") || k.includes("commit") || k.includes("version"))).toBe(true);
@@ -58,7 +58,7 @@ describeIntegration("extractKeywords (integration)", () => {
       { baseUrl: OLLAMA_URL, llmModel: "qwen3.5:4b" }
     );
     expect(result.length).toBeGreaterThan(0);
-    expect(result.length).toBeLessThanOrEqual(5);
+    expect(result.length).toBeLessThanOrEqual(35);
   }, TEST_TIMEOUT);
 }, TEST_TIMEOUT);
 

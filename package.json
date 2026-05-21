@@ -1,6 +1,6 @@
 {
   "name": "skill-ai-inject",
-  "version": "0.4.3",
+  "version": "0.4.5",
   "type": "module",
   "description": "Auto-match user delivery task with available skills for better agent responses",
   "main": "src/index.ts",
@@ -18,7 +18,8 @@
     }
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.34.49"
+    "@sinclair/typebox": "^0.34.49",
+    "nodejieba": "^3.5.8"
   },
   "devDependencies": {
     "@vitest/ui": "^4.1.5",
@@ -26,32 +27,31 @@
     "vitest": "^4.1.5"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.js --platform=node --resolve-extensions=.ts,.tsx,.js,.jsx,.mts,.cts",
+    "build": "esbuild src/index.ts --bundle --format=cjs --outfile=dist/index.js --platform=node --resolve-extensions=.ts,.tsx,.js,.jsx,.mts,.cts --external:nodejieba",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "changelog": [
     {
-      "version": "0.4.3",
-      "date": "2026-05-19",
+      "version": "0.4.5",
+      "date": "2026-05-21",
       "changes": [
-        "fix: translate.enabled default changed to false — translation hurts L2 matching scores for Chinese skill descriptions",
-        "refactor: translate.model changed to qwen2.5:3b (smaller, faster, no think overhead)",
-        "refactor: keyword.model changed to qwen3.5:4b (consistent with other projects using qwen3.5 series)",
-        "docs: README/配置示例/参数表同步更新",
-        "docs: fix duplicate bundledDiscovery section in README.md",
-        "docs: add config/OPENCLAW_CONFIG.md with critical OpenClaw configuration notes",
-        "docs: README_zh synced to match English version completeness",
-        "test: add unit tests for llm-connector (translateToEnglish, extractKeywords)",
-        "test: add integration tests for getEmbedding/translateToEnglish/extractKeywords with real Ollama",
-        "test: add translation-effectiveness-test.ts to measure translation impact on L2 matching"
+        "fix: L2 debug logging — fixed conditional logic that always showed 'none' for scores below threshold",
+        "fix: keyword extraction now uses keyword.model instead of translate.model",
+        "fix: default llmModel changed from qwen3.5:4b to qwen2.5:3b",
+        "feat: L1 now uses fuzzy wordSimilarity scoring instead of hit ratio — description length no longer penalizes score",
+        "feat: L1 POS-weighted scoring — nouns/english get high weight (1.0), verbs/function words get low weight (0.01) via nodejieba tagger",
+        "feat: L1 English stopword filter — common English stopwords get low weight to reduce noise from generic query tokens",
+        "feat: L1 optional translation via keyword.translate config (default: false)",
+        "feat: keyword extraction limit increased from 5 to 30",
+        "feat: skill-meta.json now includes metaVersion field for automatic cache invalidation on extraction logic changes"
       ]
     },
     {
       "version": "0.4.2",
       "date": "2026-05-17",
       "changes": [
-        "fix: hook registration — switch from api.on to api.registerHook with { name: 'skill-ai-inject' }",
+        "fix: hook registration — use api.on (not registerHook) for standard before_prompt_build hook",
         "fix: hook event field — use event.prompt instead of event.userMessage",
         "fix: exported plugin id to skill-ai-inject to match package name"
       ]

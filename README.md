@@ -4,7 +4,7 @@
 
 ## Version
 
-**v0.4.2** · OpenClaw 2026.5.x compatible
+**v0.4.5** · OpenClaw 2026.5.x compatible
 
 ---
 
@@ -17,6 +17,8 @@ skill-ai-inject automatically matches user input against available skills (from 
 - L2 embedding fallback for semantic matching across languages
 - Smart translation: skips translation when query already contains English characters
 - Ollama-only: no external API keys required
+- Task intent gate: only prompts matching task request patterns enter L1/L2 matching
+- Session suppression: skip re-matching within 5 minutes if prompt unchanged
 
 ---
 
@@ -30,7 +32,7 @@ ollama pull qwen3.5:4b      # for keyword extraction (with think mode)
 ollama pull qwen2.5:3b      # for translation (no think, faster)
 ```
 
-> **Translation model tip**: `qwen2.5:7b` is faster than `qwen3.5` for translation since it has no think/reasoning overhead. Even smaller models (e.g. `qwen2.5:3b`) work well for translation-only tasks.
+> **Translation model tip**: `qwen2.5:3b` is faster than `qwen3.5` for translation since it has no think/reasoning overhead. Even smaller models work well for translation-only tasks.
 
 ---
 
@@ -75,7 +77,7 @@ openclaw plugins install --link .
             "model": "qwen2.5:3b"
           },
           "matching": {
-            "skillMatchThreshold": 0.6,
+            "skillMatchThreshold": 0.5,
             "maxSkills": 3,
             "minKeywordMatch": 1,
             "l2CandidateCount": 20
@@ -83,6 +85,11 @@ openclaw plugins install --link .
           "keyword": {
             "enabled": true,
             "model": "qwen3.5:4b"
+          },
+          "taskIntent": {
+            "requireAll": false,
+            "caseSensitive": false,
+            "minLength": 5
           }
         }
       }
@@ -118,13 +125,17 @@ openclaw plugins inspect skill-ai-inject
 | `embedding.dimensions` | Vector dimensions | `1024` |
 | `translate.enabled` | Enable translation | `false` |
 | `translate.model` | Translation model | `qwen2.5:3b` |
-| `matching.skillMatchThreshold` | Skill match threshold (0-1) | `0.6` |
+| `matching.skillMatchThreshold` | Skill match threshold (0-1) | `0.5` |
 | `matching.maxSkills` | Max skills to inject | `3` |
 | `matching.minKeywordMatch` | Min keyword hits for L1 match | `1` |
 | `matching.l2CandidateCount` | Max candidates for L2 embedding stage | `20` |
 | `keyword.enabled` | Enable L1 keyword matching | `true` |
 | `keyword.model` | LLM model for keyword extraction | `qwen3.5:4b` |
 | `keyword.baseURL` | Override baseURL for keyword LLM | `null` (uses embedding.baseURL) |
+| `taskIntent.patterns` | Custom task intent patterns (array) | `null` (uses hardcoded + patterns file) |
+| `taskIntent.requireAll` | Require all patterns to match | `false` |
+| `taskIntent.caseSensitive` | Case sensitive matching | `false` |
+| `taskIntent.minLength` | Min prompt length to check patterns | `5` |
 
 **Note**: All LLM operations use Ollama locally — no external API keys required.
 
@@ -165,6 +176,11 @@ If policy-layer blocks prompt injection, skill matching results won't appear in 
 
 ```
 User Message → before_prompt_build hook
+  │
+  ├── Session suppression: skip if same prompt within 5 minutes
+  │
+  ├── Task intent gate: prompt must match task request pattern
+  │     No match → skip entirely
   │
   ├── L1: Keyword Match (zero cost)
   │     Extract English tokens from prompt
@@ -254,11 +270,14 @@ Without this, the hook silently fails to trigger — plugin appears loaded but s
 
 ## Version History
 
-|  Version  |    Date    |                                                           Changes                                                           |
-| --------- | ---------- | --------------------------------------------------------------------------------------------------------------------------- |
-| 0.1.0     | 2026-04-22 | Initial: embedding-based skill matching                                                                                     |
-| 0.2.0     | 2026-04-22 | Add multi-provider translation (ollama/minimax/openai), optimize logging                                                    |
-| 0.3.0     | 2026-04-25 | L1 keyword match (zero-cost) + L2 embed cascade; LLM keyword extraction on skill load; skip translation for English queries |
-| **0.4.0** | 2026-05-10 | **Reverse L1 matching direction; switch to `before_prompt_build` hook; hit-ratio scoring; l2CandidateCount config**         |
-| **0.4.1** | 2026-05-16 | **Rename project to skill-ai-inject; rewrite README with complete documentation**                                           |
-| **0.4.2** | 2026-05-17 | **Fix hook registration: use api.registerHook with name; use event.prompt**                                                 |
+| Version | Date | Changes |
+|---------|------|---------|
+| 0.1.0 | 2026-04-22 | Initial: embedding-based skill matching |
+| 0.2.0 | 2026-04-22 | Add multi-provider translation (ollama/minimax/openai), optimize logging |
+| 0.3.0 | 2026-04-25 | L1 keyword match (zero-cost) + L2 embed cascade; LLM keyword extraction on skill load; skip translation for English queries |
+| **0.4.0** | 2026-05-10 | **Reverse L1 matching direction; switch to `before_prompt_build` hook; hit-ratio scoring; l2CandidateCount config** |
+| **0.4.1** | 2026-05-16 | **Rename project to skill-ai-inject; rewrite README with complete documentation** |
+| **0.4.2** | 2026-05-17 | **Fix hook registration: use api.on; use event.prompt** |
+| **0.4.3** | 2026-05-19 | **Fix translate.default to false; translate uses qwen2.5:3b; keyword uses qwen3.5:4b; add unit/integration tests; add OPENCLAW_CONFIG.md** |
+| **0.4.4** | 2026-05-21 | **Add task intent gate; add session suppression; add external patterns file; taskIntent config options; ~80+ patterns; remove debug logs** |
+| **0.4.5** | 2026-05-21 | **Fix L2 debug logging; keyword extraction now uses keyword.model instead of translate.model** |
